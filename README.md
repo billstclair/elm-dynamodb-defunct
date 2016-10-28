@@ -12,6 +12,6 @@ To compile `dynamodb.elm` into `dynamodb.js`, required by `index.html`:
 
 Then aim your browser at `index.html`.
 
-Bill St. Clair <billstclair@gmail.com>
+Bill St. Clair <billstclair@gmail.com><br/>
 28 October 2016
 
