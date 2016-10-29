@@ -1,3 +1,0 @@
-#!/bin/bash
-
-elm make dynamodb.elm --output dynamodb.js

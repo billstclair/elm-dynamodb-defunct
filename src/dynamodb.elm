@@ -1,15 +1,30 @@
+----------------------------------------------------------------------
+--
+-- dynamodb.elm
+-- Example application for talking to Amazon's DynamoDB
+-- Copyright (c) 2016 Bill St. Clair <billstclair@gmail.com>
+-- Some rights reserved.
+-- Distributed under the MIT License
+-- See LICENSE.txt
+--
+----------------------------------------------------------------------
+
 port module DynamoDB exposing (..)
 
+import UrlParser
+
 import Html exposing (Html, div, h1, text, input, button)
-import Html.App as App
+import Navigation as App exposing (Location)
 import String
 import List
 
 main =
   App.programWithFlags
+    (App.makeParser locationParser)
     { init = init
     , view = view
     , update = update
+    , urlUpdate = urlUpdate
     , subscriptions = subscriptions
     }
 
@@ -22,18 +37,19 @@ type alias URLQuery =
 type alias Model =
   { href : String
   , query : URLQuery
+  , location : Location
+  , dynamoOk: Bool
   }
 
-init : (String, URLQuery) -> (Model, Cmd Msg)
-init hrefAndQuery =
-  let (href, query) = hrefAndQuery
-      href' = case String.indices "?" href of
-                   [] -> href
-                   ( idx :: _ ) ->
-                     String.left idx href
+init : Bool -> Location -> (Model, Cmd Msg)
+init dynamoOk location =
+  let (href, query) = UrlParser.parseUrl location.href
   in
-      ( { href = href'
-        , query = query }
+      ( { href = href
+        , query = query
+        , location = location
+        , dynamoOk = dynamoOk
+        }
       , Cmd.none )
 
 -- UPDATE
@@ -46,6 +62,16 @@ update msg model =
   case msg of
       LoginResult ->
         (model, Cmd.none)
+
+-- URLUPDATE
+
+locationParser : Location -> Location
+locationParser a =
+  a
+
+urlUpdate : Location -> Model -> (Model, Cmd Msg)
+urlUpdate location model =
+  ({ model | location = location }, Cmd.none)
 
 -- SUBSCRIPTIONS
 
@@ -62,6 +88,9 @@ view: Model -> Html Msg
 view model =
   div []
     [ h1 [] [ text "DynamoDB Example" ]
+    , text "Location: "
+    , text <| toString model.location
+    , br
     , text "href: "
     , text <| toString model.href
     , br
