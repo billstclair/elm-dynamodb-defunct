@@ -13,7 +13,8 @@ port module DynamoDB exposing (..)
 
 import UrlParser
 
-import Html exposing (Html, div, h1, text, input, button)
+import Html exposing (Html, div, h1, text, input, button, a, img)
+import Html.Attributes exposing (href, id, alt, src, width, height, style)
 import Navigation as App exposing (Location)
 import String
 import List
@@ -39,6 +40,7 @@ type alias Model =
   , query : URLQuery
   , location : Location
   , dynamoOk: Bool
+  , loginLoaded : Bool
   }
 
 init : Bool -> Location -> (Model, Cmd Msg)
@@ -49,6 +51,7 @@ init dynamoOk location =
         , query = query
         , location = location
         , dynamoOk = dynamoOk
+        , loginLoaded = False
         }
       , Cmd.none )
 
@@ -84,10 +87,11 @@ subscriptions model =
 br : Html msg
 br = Html.br [][]
 
-view: Model -> Html Msg
+view : Model -> Html Msg
 view model =
   div []
     [ h1 [] [ text "DynamoDB Example" ]
+    , div [ id "amazon-root" ] []
     , text "Location: "
     , text <| toString model.location
     , br
@@ -96,6 +100,19 @@ view model =
     , br
     , text "Query: "
     , text <| toString model.query
+    , br
+    , a [ href "#"
+        , id "LoginWithAmazon"
+        ]
+        [ img
+            [ style [ ("border", "0") ]
+            , alt "Login with Amazon"
+            , src "https://images-na.ssl-images-amazon.com/images/G/01/lwa/btnLWA_gold_156x32.png"
+            , width 156
+            , height 32
+            ]
+            []
+        ]
     ]
 
 {-

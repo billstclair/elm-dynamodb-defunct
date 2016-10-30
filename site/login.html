@@ -1,0 +1,55 @@
+<!---------------------------------------------------------------------
+--
+-- index.html
+-- Index file for Amazon DynamoDB example.
+-- Copyright (c) 2016 Bill St. Clair <billstclair@gmail.com>
+-- Some rights reserved.
+-- Distributed under the MIT License
+-- See LICENSE.txt
+--
+----------------------------------------------------------------------->
+
+<html>
+<head>
+<title>DynamoDB via Amazon SDK in the Browser</title>
+<script type='text/javascript' src='https://sdk.amazonaws.com/js/aws-sdk-2.6.12.min.js'></script>
+<script type='text/javascript' src='dynamodb.js'></script>
+</head>
+<body>
+
+<script type="text/javascript">
+
+// This should be passed in from the Elm code, or something
+var clientId = 'amzn1.application-oa2-client.51c688dac8f845818a4003f432d4d520';
+
+// From http://login.amazon.com/website
+window.onAmazonLoginReady = function() {
+  amazon.Login.setClientId(clientId);
+};
+
+// Modified from http://login.amazon.com/website
+// Expects to be called with document as arg
+function installLoginScript (d) {
+  var a = d.createElement('script');
+  a.type = 'text/javascript';
+  a.async = true;
+  a.id = 'amazon-login-sdk';
+  a.src = 'https://api-cdn.amazon.com/sdk/login1.js';
+  d.getElementById('amazon-root').appendChild(a);
+};
+
+//  document.getElementById('LoginWithAmazon').onclick = function() {
+function login () {
+  options = { scope : 'profile' };
+  amazon.Login.authorize(options, 'https://kakuro-dojo.com/handle_login.php');
+  return false;
+};
+
+var dynamodb = new AWS.DynamoDB();
+var app = Elm.DynamoDB.fullscreen(true);
+
+</script>
+
+</body>
+</html>
+
