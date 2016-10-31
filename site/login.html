@@ -39,14 +39,22 @@ function installLoginScript (d) {
 };
 
 //  document.getElementById('LoginWithAmazon').onclick = function() {
-function login () {
+function login (handleLoginUrl) {
   options = { scope : 'profile' };
-  amazon.Login.authorize(options, 'https://kakuro-dojo.com/handle_login.php');
+  amazon.Login.authorize(options, handleLoginUrl);  //'https://kakuro-dojo.com/handle_login.php');
   return false;
 };
 
 var dynamodb = new AWS.DynamoDB();
 var app = Elm.DynamoDB.fullscreen(true);
+
+app.ports.installLoginScript.subscribe(function(ignore) {
+  installLoginScript(document);
+});
+
+app.ports.login.subscribe(function(handleLoginUrl) {
+  login(handleLoginUrl);
+});
 
 </script>
 

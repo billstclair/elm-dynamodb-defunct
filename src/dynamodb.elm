@@ -15,9 +15,14 @@ import UrlParser
 
 import Html exposing (Html, div, h1, text, input, button, a, img)
 import Html.Attributes exposing (href, id, alt, src, width, height, style)
+import Html.Events exposing (onClick)
 import Navigation as App exposing (Location)
 import String
 import List
+
+port installLoginScript : Bool -> Cmd msg
+
+port login : String -> Cmd msg
 
 main =
   App.programWithFlags
@@ -53,16 +58,19 @@ init dynamoOk location =
         , dynamoOk = dynamoOk
         , loginLoaded = False
         }
-      , Cmd.none )
+      , installLoginScript True )
 
 -- UPDATE
 
 type Msg
   = LoginResult
+  | Login
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
+      Login ->
+        (model, login model.href)
       LoginResult ->
         (model, Cmd.none)
 
@@ -91,7 +99,7 @@ view : Model -> Html Msg
 view model =
   div []
     [ h1 [] [ text "DynamoDB Example" ]
-    , div [ id "amazon-root" ] []
+    , div [ id "amazon-root" ] [] --this id is required by the Amazon JavaScript
     , text "Location: "
     , text <| toString model.location
     , br
@@ -105,7 +113,8 @@ view model =
         , id "LoginWithAmazon"
         ]
         [ img
-            [ style [ ("border", "0") ]
+            [ onClick Login
+            , style [ ("border", "0") ]
             , alt "Login with Amazon"
             , src "https://images-na.ssl-images-amazon.com/images/G/01/lwa/btnLWA_gold_156x32.png"
             , width 156
