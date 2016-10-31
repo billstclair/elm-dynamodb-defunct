@@ -19,10 +19,27 @@ import Html.Events exposing (onClick)
 import Navigation as App exposing (Location)
 import String
 import List
+import List.Extra as LE
+import Time exposing (Time, minute)
+import Debug exposing (log)
 
+type alias Properties =
+  List (String, String)
+
+-- Bool argument ignored.
+-- Must have a div with an id of "amazon-root" before calling.
 port installLoginScript : Bool -> Cmd msg
 
+-- (login state) includes the state in the returned Properties to loginResponse
 port login : String -> Cmd msg
+
+-- Arrives in response to a login command
+port loginResponse : (Properties -> msg) -> Sub msg
+
+-- Writing and reading properties.
+port saveProperties : (String, Properties) -> Cmd msg
+port requestProperties : String -> Cmd msg
+port receiveProperties : (Maybe Properties -> msg) -> Sub msg
 
 main =
   App.programWithFlags
@@ -44,35 +61,56 @@ type alias Model =
   { href : String
   , query : URLQuery
   , location : Location
-  , dynamoOk: Bool
+  , dynamoDbProperties: Properties
+  , loginProperties : Properties
   , loginLoaded : Bool
+  , nextRenew : Maybe Time
   }
 
-init : Bool -> Location -> (Model, Cmd Msg)
-init dynamoOk location =
+init : Properties -> Location -> (Model, Cmd Msg)
+init properties location =
   let (href, query) = UrlParser.parseUrl location.href
   in
       ( { href = href
         , query = query
         , location = location
-        , dynamoOk = dynamoOk
+        , dynamoDbProperties = properties
+        , loginProperties = []
         , loginLoaded = False
+        , nextRenew = Nothing
         }
-      , installLoginScript True )
+      , installLoginScript True
+      )
 
 -- UPDATE
 
 type Msg
-  = LoginResult
-  | Login
+  = Login
+  | LoginResponse Properties
+  | PeriodicTask Time
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
       Login ->
-        (model, login model.href)
-      LoginResult ->
-        (model, Cmd.none)
+        --need to generate, remember, & compare random state
+        (model, login "Elm State")
+      LoginResponse properties ->
+        ( { model | loginProperties = properties }
+        , Cmd.none
+        )
+      PeriodicTask time ->
+        periodicTask time model
+
+getProp : String -> Properties -> Maybe String
+getProp key properties =
+  case LE.find (\a -> key == (fst a)) properties of
+    Nothing -> Nothing
+    Just (k, v) -> Just v
+
+periodicTask : Time -> Model -> (Model, Cmd msg)
+periodicTask time model =
+  (model, Cmd.none)
 
 -- URLUPDATE
 
@@ -88,7 +126,9 @@ urlUpdate location model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Sub.none
+  Sub.batch [ Time.every minute PeriodicTask
+            , loginResponse LoginResponse
+            ]
 
 -- VIEW
 
@@ -100,8 +140,11 @@ view model =
   div []
     [ h1 [] [ text "DynamoDB Example" ]
     , div [ id "amazon-root" ] [] --this id is required by the Amazon JavaScript
-    , text "Location: "
-    , text <| toString model.location
+    , text "DynamoDB Properties: "
+    , text <| toString model.dynamoDbProperties
+    , br
+    , text "Login Properties: "
+    , text <| toString model.loginProperties
     , br
     , text "href: "
     , text <| toString model.href

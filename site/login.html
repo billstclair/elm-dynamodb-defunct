@@ -38,23 +38,97 @@ function installLoginScript (d) {
   d.getElementById('amazon-root').appendChild(a);
 };
 
+function addProperty (name, obj, arr) {
+  var val = obj[name];
+  if (!(val === undefined)) {
+    arr.push([name, String(val)])
+  }
+  return arr;
+}
+
+function addProperties (names, obj, arr) {
+  for (idx in names) {
+    var name = names[idx];
+    arr = addProperty(name, obj, arr);
+  }
+  return arr;
+}
+
+var loginCompleteResponse = null;
+
+function loginComplete (response) {
+  loginCompleteResponse = response;
+  var res = [];
+  var err = response.error;
+  if (err) {
+    res = addProperties(["error", "error_description", "error_uri"],
+                        response,
+                        res);
+  } else {
+    res = addProperties(["state", "access_token",
+                         "token_type", "expires_in", "scope"],
+                        response,
+                        res)
+  }
+  app.ports.loginResponse.send(res);
+}
+
 //  document.getElementById('LoginWithAmazon').onclick = function() {
-function login (handleLoginUrl) {
-  options = { scope : 'profile' };
-  amazon.Login.authorize(options, handleLoginUrl);  //'https://kakuro-dojo.com/handle_login.php');
-  return false;
+function login (state) {
+  options = { scope : 'profile', state : state };
+  amazon.Login.authorize(options, loginComplete);
 };
 
+function getDynamoDbProperties (db) {
+  var res = getProperties("");
+  if (!res) res = [];  
+  var api = db.api;
+  function addProp(name) {
+    var val = api[name];
+    if (typeof(val) == 'string') {
+      res.push([name, val]);
+    }
+  }
+  addProp("abbreviation");
+  addProp("apiVersion");
+  addProp("protocol");
+  return res;
+}
+
 var dynamodb = new AWS.DynamoDB();
-var app = Elm.DynamoDB.fullscreen(true);
+var properties = getDynamoDbProperties(dynamodb);
+var app = Elm.DynamoDB.fullscreen(properties);
 
 app.ports.installLoginScript.subscribe(function(ignore) {
   installLoginScript(document);
 });
 
-app.ports.login.subscribe(function(handleLoginUrl) {
-  login(handleLoginUrl);
+app.ports.login.subscribe(function(state) {
+  login(state);
 });
+
+function storageName(name) {
+  return "dynamodb_" + name;
+}
+
+function putProperties(name, properties) {
+  json = JSON.stringify(properties);
+  localStorage.setItem(storageName(name), json);
+}
+
+function getProperties(name) {
+  json = localStorage.getItem(storageName(name));
+  properties = json ? JSON.parse(json) : null;
+  return properties;
+}
+
+app.ports.saveProperties.subscribe(function(pair) {
+  putProperties(pair[0], pair[1]);
+});
+
+app.ports.requestProperties.subscribe(function(name) {
+  app.ports.receiveProperties.send(getProperties(name));
+});  
 
 </script>
 
