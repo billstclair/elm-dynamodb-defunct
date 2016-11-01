@@ -13,14 +13,15 @@ port module DynamoDB exposing (..)
 
 import UrlParser
 
-import Html exposing (Html, div, h1, text, input, button, a, img)
+import Html exposing (Html, div, h1, text, input, button, a, img, p)
 import Html.Attributes exposing (href, id, alt, src, width, height, style)
 import Html.Events exposing (onClick)
 import Navigation as App exposing (Location)
 import String
 import List
 import List.Extra as LE
-import Time exposing (Time, minute)
+import Time exposing (Time, minute, second)
+import Random
 import Debug exposing (log)
 import Http
 import Task
@@ -72,6 +73,8 @@ type alias Model =
   , loginLoaded : Bool
   , error : String
   , profile : Properties
+  , state : Int
+  , expectedState : String
   }
 
 init : Properties -> Location -> (Model, Cmd Msg)
@@ -86,6 +89,8 @@ init properties location =
         , loginLoaded = False
         , error = ""
         , profile = []
+        , state = 0
+        , expectedState = ""
         }
       , installLoginScript True
       )
@@ -98,6 +103,8 @@ type Msg
   | FetchProfileError Http.Error
   | ProfileReceived Properties
   | Logout
+  | GenerateState Time
+  | SetState Int
 
 {-
 $c = curl_init('https://api.amazon.com/user/profile');
@@ -126,20 +133,32 @@ getAmazonUserProfile accessToken =
 handleLoginResponse : Properties -> Model -> (Model, Cmd Msg)
 handleLoginResponse properties model =
   let model' = { model | loginProperties = properties }
+      expectedState = model.expectedState
   in
       case getProp "error_description" properties of
           Just err ->
             ( { model' | error = "Login error: " ++ err }, Cmd.none )
           Nothing ->
-            case getProp "access_token" properties of
-                Nothing ->
-                  ( { model' | error = "No access token returned from login." }
-                  , Cmd.none
-                  )
-                Just accessToken ->
-                  ( model'
-                  , getAmazonUserProfile accessToken
-                  )
+            let err = case getProp "state" properties of
+                          Nothing -> "No state returned from login"
+                          Just state ->
+                            if state == expectedState then
+                              ""
+                            else
+                              "Cross-site Request Forgery attempt."
+            in
+                if err /= "" then
+                  ( { model' | error = err }, Cmd.none )
+                else
+                  case getProp "access_token" properties of
+                      Nothing ->
+                        ( { model' | error = "No access token returned from login." }
+                        , Cmd.none
+                        )
+                      Just accessToken ->
+                        ( model'
+                        , getAmazonUserProfile accessToken
+                        )
 
 handleProfileError : Http.Error -> Model -> (Model, Cmd Msg)
 handleProfileError error model =
@@ -156,12 +175,19 @@ handleProfileError error model =
             , Cmd.none
             )
 
+handleLogin : Model -> (Model, Cmd Msg)
+handleLogin model =
+  let state = toString model.state
+  in
+      ( { model | expectedState = state }
+      , login state)
+
+
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
       Login ->
-        --need to generate, remember, & compare random state
-        (model, login "Elm State")
+        handleLogin model
       LoginResponse properties ->
         handleLoginResponse properties model
       FetchProfileError error ->
@@ -174,6 +200,14 @@ update msg model =
           , profile = []
           }
         , logout True
+        )
+      GenerateState time ->
+        ( model
+        , Random.generate SetState <| Random.int Random.minInt Random.maxInt
+        )
+      SetState state ->
+        ( { model | state = state }
+        , Cmd.none
         )
 
 getProp : String -> Properties -> Maybe String
@@ -197,6 +231,7 @@ urlUpdate location model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.batch [ loginResponse LoginResponse
+            , Time.every second GenerateState
             ]
 
 -- VIEW
@@ -254,4 +289,9 @@ view model =
                   ]
                   [ text "Logout" ]
             ]
+    , p []
+        [ text "Code at: "
+        , a [ href "https://github.com/billstclair/elm-dynamodb" ]
+          [ text "github.com/billstclair/elm-dynamodb" ]
+        ]
     ]
