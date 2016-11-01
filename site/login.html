@@ -83,16 +83,9 @@ function getDynamoDbProperties (db) {
   var res = getProperties("");
   if (!res) res = [];  
   var api = db.api;
-  function addProp(name) {
-    var val = api[name];
-    if (typeof(val) == 'string') {
-      res.push([name, val]);
-    }
-  }
-  addProp("abbreviation");
-  addProp("apiVersion");
-  addProp("protocol");
-  return res;
+  return addProperties(["abbreviation", "apiVersion", "protocol"],
+                       api,
+                       res);
 }
 
 var dynamodb = new AWS.DynamoDB();

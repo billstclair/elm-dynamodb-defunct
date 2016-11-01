@@ -22,6 +22,9 @@ import List
 import List.Extra as LE
 import Time exposing (Time, minute)
 import Debug exposing (log)
+import Http
+import Task
+import Json.Decode as JD
 
 type alias Properties =
   List (String, String)
@@ -64,7 +67,8 @@ type alias Model =
   , dynamoDbProperties: Properties
   , loginProperties : Properties
   , loginLoaded : Bool
-  , nextRenew : Maybe Time
+  , error : String
+  , profile : Properties
   }
 
 init : Properties -> Location -> (Model, Cmd Msg)
@@ -77,7 +81,8 @@ init properties location =
         , dynamoDbProperties = properties
         , loginProperties = []
         , loginLoaded = False
-        , nextRenew = Nothing
+        , error = ""
+        , profile = []
         }
       , installLoginScript True
       )
@@ -87,7 +92,65 @@ init properties location =
 type Msg
   = Login
   | LoginResponse Properties
-  | PeriodicTask Time
+  | FetchProfileError Http.Error
+  | ProfileReceived Properties
+
+{-
+$c = curl_init('https://api.amazon.com/user/profile');
+curl_setopt($c, CURLOPT_HTTPHEADER, array('Authorization: bearer ' . $_REQUEST['access_token']));
+curl_setopt($c, CURLOPT_RETURNTRANSFER, true);
+-}
+defaultSettings : Http.Settings
+defaultSettings =
+  let settings = Http.defaultSettings
+  in
+      { settings | timeout = Time.minute }
+
+getAmazonUserProfile : String -> Cmd Msg
+getAmazonUserProfile accessToken =
+  let task = Http.send
+               defaultSettings
+               { verb = "GET"
+               , headers = [("Authorization", "bearer " ++ accessToken)]
+               , url = "https://api.amazon.com/user/profile"
+               , body = Http.empty
+               }
+      decoded = Http.fromJson (JD.keyValuePairs JD.string) task
+  in
+      Task.perform FetchProfileError ProfileReceived decoded
+
+handleLoginResponse : Properties -> Model -> (Model, Cmd Msg)
+handleLoginResponse properties model =
+  let model' = { model | loginProperties = properties }
+  in
+      case getProp "error_description" properties of
+          Just err ->
+            ( { model' | error = "Login error: " ++ err }, Cmd.none )
+          Nothing ->
+            case getProp "access_token" properties of
+                Nothing ->
+                  ( { model' | error = "No access token returned from login." }
+                  , Cmd.none
+                  )
+                Just accessToken ->
+                  ( model'
+                  , getAmazonUserProfile accessToken
+                  )
+
+handleProfileError : Http.Error -> Model -> (Model, Cmd Msg)
+handleProfileError error model =
+  let msg = case error of
+                Http.Timeout -> "timeout"
+                Http.NetworkError -> "network error"
+                Http.UnexpectedPayload json ->
+                  "Unexpected Payload: " ++ json
+                Http.BadResponse code err ->
+                  "Bad Response: " ++ (toString code) ++ err
+                  
+        in
+            ( { model | error = "Profile fetch error: " ++ msg }
+            , Cmd.none
+            )
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -96,21 +159,17 @@ update msg model =
         --need to generate, remember, & compare random state
         (model, login "Elm State")
       LoginResponse properties ->
-        ( { model | loginProperties = properties }
-        , Cmd.none
-        )
-      PeriodicTask time ->
-        periodicTask time model
+        handleLoginResponse properties model
+      FetchProfileError error ->
+        handleProfileError error model
+      ProfileReceived response ->
+        ( { model | profile = response }, Cmd.none)
 
 getProp : String -> Properties -> Maybe String
 getProp key properties =
   case LE.find (\a -> key == (fst a)) properties of
     Nothing -> Nothing
     Just (k, v) -> Just v
-
-periodicTask : Time -> Model -> (Model, Cmd msg)
-periodicTask time model =
-  (model, Cmd.none)
 
 -- URLUPDATE
 
@@ -126,8 +185,7 @@ urlUpdate location model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  Sub.batch [ Time.every minute PeriodicTask
-            , loginResponse LoginResponse
+  Sub.batch [ loginResponse LoginResponse
             ]
 
 -- VIEW
@@ -140,6 +198,9 @@ view model =
   div []
     [ h1 [] [ text "DynamoDB Example" ]
     , div [ id "amazon-root" ] [] --this id is required by the Amazon JavaScript
+    , text "Error: "
+    , text <| model.error
+    , br
     , text "DynamoDB Properties: "
     , text <| toString model.dynamoDbProperties
     , br
@@ -151,6 +212,9 @@ view model =
     , br
     , text "Query: "
     , text <| toString model.query
+    , br
+    , text "Profile: "
+    , text <| toString model.profile
     , br
     , a [ href "#"
         , id "LoginWithAmazon"
