@@ -100,6 +100,10 @@ app.ports.login.subscribe(function(state) {
   login(state);
 });
 
+app.ports.logout.subscribe(function(ignore) {
+  amazon.Login.logout();
+});
+
 function storageName(name) {
   return "dynamodb_" + name;
 }

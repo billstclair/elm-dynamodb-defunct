@@ -39,6 +39,9 @@ port login : String -> Cmd msg
 -- Arrives in response to a login command
 port loginResponse : (Properties -> msg) -> Sub msg
 
+-- Bool argument ignored
+port logout : Bool -> Cmd msg
+
 -- Writing and reading properties.
 port saveProperties : (String, Properties) -> Cmd msg
 port requestProperties : String -> Cmd msg
@@ -94,6 +97,7 @@ type Msg
   | LoginResponse Properties
   | FetchProfileError Http.Error
   | ProfileReceived Properties
+  | Logout
 
 {-
 $c = curl_init('https://api.amazon.com/user/profile');
@@ -164,6 +168,13 @@ update msg model =
         handleProfileError error model
       ProfileReceived response ->
         ( { model | profile = response }, Cmd.none)
+      Logout ->
+        ( { model |
+           loginProperties = []
+          , profile = []
+          }
+        , logout True
+        )
 
 getProp : String -> Properties -> Maybe String
 getProp key properties =
@@ -229,4 +240,18 @@ view model =
             ]
             []
         ]
+    , case (getProp "name" model.profile) of
+          Nothing -> text ""
+          Just name ->
+            div []
+              [ br
+              , text "Logged in as: "
+              , text name
+              ,br
+              , a [ href "#"
+                  , id "Logout"
+                  , onClick Logout
+                  ]
+                  [ text "Logout" ]
+            ]
     ]
