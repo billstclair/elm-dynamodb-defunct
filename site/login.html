@@ -65,6 +65,9 @@ function loginComplete (response) {
                         response,
                         res);
   } else {
+    var accessToken = response.access_token;
+    // http://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/loading-browser-credentials-federated-id.html
+    AWS.config.credentials.params.WebIdentityToken = accessToken;
     res = addProperties(["state", "access_token",
                          "token_type", "expires_in", "scope"],
                         response,
@@ -88,10 +91,124 @@ function getDynamoDbProperties (db) {
                        res);
 }
 
+// These also need to be settable parameters
+var dynamoTable = "haslists";
+var dynamoApp = "kakuro";
+
+function debugCallback(err, data) {
+  if (err) console.log(err, err.stack);
+  else console.log(data);
+}
+
+// DynamoDB access functions
+function updateItem(keys, value, callback) {
+  if (callback === undefined) {
+    callback = debugCallback;
+  }
+  var params = {
+    Key: {
+      user: {
+        S: keys.user
+      },
+      appkey: {
+        S: dynamoApp + ":" + keys.key
+      }
+    },
+    TableName: dynamoTable,
+    AttributeUpdates: {
+      value: {
+        Action : 'PUT',
+        Value: {
+          S: value
+        }
+      }
+    }
+  }
+  dynamodb.updateItem(params, callback);
+}
+
+function getItem(keys, callback) {
+  if (callback === undefined) {
+    callback = debugCallback;
+  }
+  var params = {
+    Key: {
+      user: {
+        S: keys.user
+      },
+      appkey: {
+        S: dynamoApp + ":" + keys.key
+      }
+    },
+    TableName: dynamoTable,
+    AttributesToGet: [
+      'value'
+      ]
+  }
+  dynamodb.getItem(params, callback);
+}
+
+function deleteItem(keys, callback) {
+  if (callback === undefined) {
+    callback = debugCallback;
+  }
+  var params = {
+    Key: {
+      user: {
+        S: keys.user
+      },
+      appkey: {
+        S: dynamoApp + ":" + keys.key
+      }
+    },
+    TableName: dynamoTable,
+  }
+  dynamodb.deleteItem(params, callback);
+}
+
+function scanKeys(user, callback) {
+  if (callback === undefined) {
+    callback = debugCallback;
+  }
+  var params = {
+    TableName: dynamoTable,
+    AttributesToGet: [
+      'appkey'
+      ],
+    ScanFilter: {
+      appkey: {
+        ComparisonOperator: 'BEGINS_WITH',
+        AttributeValueList: [
+          {
+            S: dynamoApp + ':'
+          }
+        ]
+      }
+    }
+  }
+  dynamodb.scan(params, callback);
+}
+
+
+// Roles created here:
+// https://console.aws.amazon.com/iam/home?#roles
+// The RoleArn should be a parameter.
+AWS.config.credentials = new AWS.WebIdentityCredentials({
+  RoleArn: 'arn:aws:iam::575107064159:role/haslists-wif',
+  ProviderId: 'www.amazon.com',
+});
+
+// This should be a parameter.
+AWS.config.update({region: 'us-east-1'});
+
+// Create a service object
 var dynamodb = new AWS.DynamoDB();
 var properties = getDynamoDbProperties(dynamodb);
+
+// Start the Elm app
 var app = Elm.DynamoDB.fullscreen(properties);
 
+// Elm Ports
 app.ports.installLoginScript.subscribe(function(ignore) {
   installLoginScript(document);
 });
