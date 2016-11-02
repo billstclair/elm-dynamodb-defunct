@@ -121,11 +121,11 @@ login : Int -> Database model msg -> Cmd msg
 login tag database =
   Cmd.none
 
-put : Int -> key -> value -> Database model msg -> Cmd msg
+put : Int -> String -> String -> Database model msg -> Cmd msg
 put tag key value database =
   Cmd.none
 
-get : Int -> key -> Database model msg -> Cmd msg
+get : Int -> String -> Database model msg -> Cmd msg
 get tag key database =
   Cmd.none
 
