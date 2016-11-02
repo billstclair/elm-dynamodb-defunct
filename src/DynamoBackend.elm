@@ -9,7 +9,14 @@
 --
 ----------------------------------------------------------------------
 
-module DynamoBackend exposing (..)
+module DynamoBackend exposing ( Profile, Properties, StringDict
+                              , Database, ResultDispatcher
+                              , ErrorType (..), Error
+                              , makeProfile, makeResultDispatcher, getProp
+                              , makeDynamoDb, makeSimulatedDb
+                              , login, put, get, scan
+                              , update
+                              )
 
 import String
 import Dict exposing (Dict)
@@ -20,6 +27,13 @@ type alias Profile =
   { email : String
   , name : String
   , userId : String
+  }
+
+makeProfile : String -> String -> String -> Profile
+makeProfile email name userId =
+  { email = email
+  , name = name
+  , userId = userId
   }
 
 type ErrorType
@@ -33,14 +47,14 @@ type alias Error =
   , message : String
   }
 
-type alias ResultDispatcher model =
-  { login : (Profile -> model -> model)
-  , get : (String -> model -> model)
-  , put : (String -> model -> model)
-  , scan : (List String -> model -> model)
+type alias ResultDispatcher model msg =
+  { login : (Profile -> model -> (model, Cmd msg))
+  , get : (String -> String -> model -> (model, Cmd msg))
+  , put : (String -> String -> model -> (model, Cmd msg))
+  , scan : (List String -> model -> (model, Cmd msg))
   }
 
-makeResultDispatcher : (Profile -> model -> model) -> (String -> model -> model) -> (String -> model -> model) -> (List String -> model -> model) -> ResultDispatcher model
+makeResultDispatcher : (Profile -> model -> (model, Cmd msg)) -> (String -> String -> model -> (model, Cmd msg)) -> (String -> String -> model -> (model, Cmd msg)) -> (List String -> model -> (model, Cmd msg)) -> ResultDispatcher model msg
 makeResultDispatcher login get put scan =
   { login = login
   , get = get
@@ -64,7 +78,7 @@ type alias DynamoDb model msg =
   , roleArn : String
   , awsRegion : String
   , backendPort : (Int -> Properties -> Cmd msg)
-  , dispatcher : ResultDispatcher model
+  , dispatcher : ResultDispatcher model msg
   }
 
 type alias StringDict =
@@ -75,14 +89,14 @@ type alias SimDb model msg =
   , getDict : (model -> StringDict)
   , setDict : (StringDict -> model -> model)
   , simulatedPort : (Int -> Properties -> Cmd msg)
-  , dispatcher : ResultDispatcher model
+  , dispatcher : ResultDispatcher model msg
   }
 
 type Database model msg
   = Simulated (SimDb model msg)
   | Dynamo (DynamoDb model msg)
 
-makeDynamoDb : String -> String -> String -> String -> String -> (Int -> Properties -> Cmd msg) -> (ResultDispatcher model) -> Database model msg
+makeDynamoDb : String -> String -> String -> String -> String -> (Int -> Properties -> Cmd msg) -> ResultDispatcher model msg -> Database model msg
 makeDynamoDb clientId tableName appName roleArn awsRegion backendPort dispatcher =
   Dynamo { clientId = clientId
          , tableName = tableName
@@ -93,8 +107,8 @@ makeDynamoDb clientId tableName appName roleArn awsRegion backendPort dispatcher
          , dispatcher = dispatcher
          }
 
-makeSimDb : Profile -> (model -> StringDict) -> (StringDict -> model -> model) -> (Int -> Properties -> Cmd msg) -> ResultDispatcher model -> Database model msg
-makeSimDb profile getDict setDict simulatedPort dispatcher =
+makeSimulatedDb : Profile -> (model -> StringDict) -> (StringDict -> model -> model) -> (Int -> Properties -> Cmd msg) -> ResultDispatcher model msg -> Database model msg
+makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
   Simulated { profile = profile
             , getDict = getDict
             , setDict = setDict
@@ -129,7 +143,7 @@ simulatedPut tag key value database model =
         tag
         [ ("tag", toString tag)
         , ("operation", "put")
-        , ("value", value)
+        , ("key", key)
         ]
     )
 
@@ -144,6 +158,7 @@ simulatedGet tag key database model =
       tag
       [ ("tag", toString tag)
       , ("operation", "get")
+      , ("key", key)
       , ("value", value)
       ]
 
@@ -225,7 +240,7 @@ otherError message =
   , message = message
   }
 
-update : Int -> Properties -> Database model msg -> model -> Result Error model
+update : Int -> Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 update tag properties database model =
   let wasTag = case getProp "tag" properties of
                  Nothing -> 0
@@ -261,13 +276,13 @@ update tag properties database model =
               _ ->
                 Err  <| otherError <| "Unknown operation: " ++ operation
             
-getDispatcher : Database model msg -> ResultDispatcher model
+getDispatcher : Database model msg -> ResultDispatcher model msg
 getDispatcher database =
   case database of
     Simulated simDb -> simDb.dispatcher
     Dynamo dynDb -> dynDb.dispatcher
 
-updateLogin : Properties -> Database model msg -> model -> Result Error model
+updateLogin : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateLogin properties database model =
   case getProp "email" properties of
     Nothing ->
@@ -286,39 +301,43 @@ updateLogin properties database model =
                             , userId = userId
                             }
                   dispatcher = getDispatcher database
-                  model' = dispatcher.login profile model
               in
-                Ok model'                             
+                Ok <| dispatcher.login profile model
 
-updateGet : Properties -> Database model msg -> model -> Result Error model
+updateGet : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateGet properties database model =
-  case getProp "value" properties of
+  case getProp "key" properties of
     Nothing ->
-      Err <| otherError "Missing value in get return."
-    Just value ->
-      let dispatcher = getDispatcher database
-          model' = dispatcher.get value model
-      in
-        Ok model'
+      Err <| otherError "Missing key in get return."
+    Just key ->
+      case getProp "value" properties of
+        Nothing ->
+          Err <| otherError "Missing value in get return."
+        Just value ->
+          let dispatcher = getDispatcher database
+          in
+            Ok <| dispatcher.get key value model
 
-updatePut : Properties -> Database model msg -> model -> Result Error model
+updatePut : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updatePut properties database model =
-  case getProp "value" properties of
+  case getProp "key" properties of
     Nothing ->
-      Err <| otherError "Missing value in get return."
-    Just value ->
-      let dispatcher = getDispatcher database
-          model' = dispatcher.put value model
-      in
-        Ok model'
+      Err <| otherError "Missing key in put return."
+    Just key ->
+      case getProp "value" properties of
+        Nothing ->
+          Err <| otherError "Missing value in put return."
+        Just value ->
+          let dispatcher = getDispatcher database
+          in
+            Ok <| dispatcher.put key value model
 
-updateScan : Properties -> Database model msg -> model -> Result Error model
+updateScan : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateScan properties database model =
   case getProp "keys" properties of
     Nothing ->
       Err <| otherError "Missing value in get return."
     Just keys ->
       let dispatcher = getDispatcher database
-          model' = dispatcher.scan (String.split "\\" keys) model
       in
-        Ok model'
+        Ok <| dispatcher.scan (String.split "\\" keys) model
