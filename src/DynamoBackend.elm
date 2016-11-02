@@ -41,7 +41,7 @@ type alias TaggedProfile =
   (Int, Profile)
 
 type alias LoginResult =
-  Result Error (TaggedProfile)
+  Result Error TaggedProfile
 
 type alias GetResult =
   Result Error TaggedString
@@ -50,10 +50,10 @@ type alias ScanResult =
   Result Error (Int, List String)
 
 type alias ResultDispatcher model =
-  { login : (TaggedProfile Int -> model -> model)
-  , get : (GetResult Int -> model -> model)
-  , put : (GetResult Int -> model -> model)
-  , scan : (ScanResult Int -> model -> model)
+  { login : (TaggedProfile -> model -> model)
+  , get : (GetResult -> model -> model)
+  , put : (GetResult -> model -> model)
+  , scan : (ScanResult -> model -> model)
   }
 
 makeResultDispatcher : (TaggedProfile -> model -> model) -> (GetResult -> model -> model) -> (GetResult -> model -> model) -> (ScanResult -> model -> model) -> ResultDispatcher model
@@ -117,18 +117,18 @@ makeDatabase dynamoDatabase simulatedDatabase =
   , simulatedDatabase = simulatedDatabase
   }
 
-login : Int -> Database tag model msg -> Cmd msg
+login : Int -> Database model msg -> Cmd msg
 login tag database =
   Cmd.none
 
-put : Int -> key -> value -> Database tag model msg -> Cmd msg
+put : Int -> key -> value -> Database model msg -> Cmd msg
 put tag key value database =
   Cmd.none
 
-get : Int -> key -> Database tag model msg -> Cmd msg
+get : Int -> key -> Database model msg -> Cmd msg
 get tag key database =
   Cmd.none
 
-scan : Int -> Database tag model msg -> Cmd msg
+scan : Int -> Database model msg -> Cmd msg
 scan tag database =
   Cmd.none
