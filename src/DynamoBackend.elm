@@ -12,9 +12,9 @@
 module DynamoBackend exposing ( Profile, Properties, StringDict
                               , Database, ResultDispatcher
                               , ErrorType (..), Error
-                              , makeProfile, makeResultDispatcher, getProp
+                              , getProp
                               , makeDynamoDb, makeSimulatedDb
-                              , login, put, get, scan
+                              , login, put, get, scan, logout
                               , update
                               )
 
@@ -29,13 +29,6 @@ type alias Profile =
   , userId : String
   }
 
-makeProfile : String -> String -> String -> Profile
-makeProfile email name userId =
-  { email = email
-  , name = name
-  , userId = userId
-  }
-
 type ErrorType
   = Timeout
   | LoginExpired
@@ -48,18 +41,11 @@ type alias Error =
   }
 
 type alias ResultDispatcher model msg =
-  { login : (Profile -> model -> (model, Cmd msg))
-  , get : (String -> String -> model -> (model, Cmd msg))
-  , put : (String -> String -> model -> (model, Cmd msg))
-  , scan : (List String -> model -> (model, Cmd msg))
-  }
-
-makeResultDispatcher : (Profile -> model -> (model, Cmd msg)) -> (String -> String -> model -> (model, Cmd msg)) -> (String -> String -> model -> (model, Cmd msg)) -> (List String -> model -> (model, Cmd msg)) -> ResultDispatcher model msg
-makeResultDispatcher login get put scan =
-  { login = login
-  , get = get
-  , put = put
-  , scan = scan
+  { login : (Profile -> Database model msg -> model -> (model, Cmd msg))
+  , get : (String -> String -> Database model msg -> model -> (model, Cmd msg))
+  , put : (String -> String -> Database model msg -> model -> (model, Cmd msg))
+  , scan : (List String -> Database model msg -> model -> (model, Cmd msg))
+  , logout : ( Database model msg -> model -> (model, Cmd msg))
   }
 
 type alias Properties =
@@ -96,25 +82,14 @@ type Database model msg
   = Simulated (SimDb model msg)
   | Dynamo (DynamoDb model msg)
 
-makeDynamoDb : String -> String -> String -> String -> String -> (Int -> Properties -> Cmd msg) -> ResultDispatcher model msg -> Database model msg
-makeDynamoDb clientId tableName appName roleArn awsRegion backendPort dispatcher =
-  Dynamo { clientId = clientId
-         , tableName = tableName
-         , appName = appName
-         , roleArn = roleArn
-         , awsRegion = awsRegion
-         , backendPort = backendPort
-         , dispatcher = dispatcher
-         }
+makeDynamoDb cliendId tableName appName roleArn awsRegion backendPort dispatcher =
+  Dynamo
+    (DynamoDb
+       cliendId tableName appName roleArn awsRegion backendPort dispatcher)
 
-makeSimulatedDb : Profile -> (model -> StringDict) -> (StringDict -> model -> model) -> (Int -> Properties -> Cmd msg) -> ResultDispatcher model msg -> Database model msg
 makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
-  Simulated { profile = profile
-            , getDict = getDict
-            , setDict = setDict
-            , simulatedPort = simulatedPort
-            , dispatcher = dispatcher
-            }
+  Simulated
+    (SimDb profile getDict setDict simulatedPort dispatcher)
 
 ---
 --- Simulated database API
@@ -174,6 +149,14 @@ simulatedScan tag database model =
       , ("keys", keys)
       ]
 
+simulatedLogout : Int -> SimDb model msg -> model -> Cmd msg
+simulatedLogout tag database model =
+  database.simulatedPort
+    tag
+    [ ("tag", toString tag)
+    , ("operation", "logout")
+    ]
+
 --
 -- Real database API. Not done yet.
 --
@@ -192,6 +175,10 @@ dynamoGet tag key database model =
 
 dynamoScan : Int -> DynamoDb model msg -> model -> Cmd msg
 dynamoScan tag database model =
+  Cmd.none
+
+dynamoLogout : Int -> DynamoDb model msg -> model -> Cmd msg
+dynamoLogout tag database model =
   Cmd.none
 
 --
@@ -229,6 +216,14 @@ scan tag database model =
       simulatedScan tag simDb model
     Dynamo dynamoDb ->
       dynamoScan tag dynamoDb model
+
+logout : Int -> Database model msg -> model -> Cmd msg
+logout tag database model =
+  case database of
+    Simulated simDb ->
+      simulatedLogout tag simDb model
+    Dynamo dynamoDb ->
+      dynamoLogout tag dynamoDb model
 
 --
 -- Call this from the command that comes from the DynamoDb port or the simulator
@@ -271,6 +266,8 @@ update tag properties database model =
                 updatePut properties database model
               "scan" ->
                 updateScan properties database model
+              "logout" ->
+                updateLogout properties database model
               "missing" ->
                 Err <| otherError "Missing operation in properties."
               _ ->
@@ -302,7 +299,7 @@ updateLogin properties database model =
                             }
                   dispatcher = getDispatcher database
               in
-                Ok <| dispatcher.login profile model
+                Ok <| dispatcher.login profile database model
 
 updateGet : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateGet properties database model =
@@ -316,7 +313,7 @@ updateGet properties database model =
         Just value ->
           let dispatcher = getDispatcher database
           in
-            Ok <| dispatcher.get key value model
+            Ok <| dispatcher.get key value database model
 
 updatePut : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updatePut properties database model =
@@ -330,7 +327,7 @@ updatePut properties database model =
         Just value ->
           let dispatcher = getDispatcher database
           in
-            Ok <| dispatcher.put key value model
+            Ok <| dispatcher.put key value database model
 
 updateScan : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateScan properties database model =
@@ -340,4 +337,10 @@ updateScan properties database model =
     Just keys ->
       let dispatcher = getDispatcher database
       in
-        Ok <| dispatcher.scan (String.split "\\" keys) model
+        Ok <| dispatcher.scan (String.split "\\" keys) database model
+
+updateLogout : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
+updateLogout properties database model =
+  let dispatcher = getDispatcher database
+  in
+    Ok <| dispatcher.logout database model
