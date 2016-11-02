@@ -31,35 +31,32 @@ type alias Error =
   , message : String
   }
 
-type alias TaggedValue tag value =
-  (tag, value)
+type alias TaggedValue value =
+  (Int, value)
 
-type alias TaggedString tag =
-  (tag, String)
+type alias TaggedString =
+  (Int, String)
 
-type alias TaggedProfile tag =
-  (tag, Profile)
+type alias TaggedProfile =
+  (Int, Profile)
 
-type alias LoginResult tag =
-  Result Error (TaggedProfile tag)
+type alias LoginResult =
+  Result Error (TaggedProfile)
 
-type alias GetResult tag =
-  Result Error (TaggedString tag)
+type alias GetResult =
+  Result Error TaggedString
 
-type alias TagResult tag =
-  Result Error tag
+type alias ScanResult =
+  Result Error (Int, List String)
 
-type alias ScanResult tag =
-  Result Error (tag, List String)
-
-type alias ResultDispatcher tag model =
-  { login : (TaggedProfile tag -> model -> model)
-  , get : (GetResult tag -> model -> model)
-  , put : (GetResult tag -> model -> model)
-  , scan : (ScanResult tag -> model -> model)
+type alias ResultDispatcher model =
+  { login : (TaggedProfile Int -> model -> model)
+  , get : (GetResult Int -> model -> model)
+  , put : (GetResult Int -> model -> model)
+  , scan : (ScanResult Int -> model -> model)
   }
 
-makeResultDispatcher : (TaggedProfile tag -> model -> model) -> (GetResult tag -> model -> model) -> (GetResult tag -> model -> model) -> (ScanResult tag -> model -> model) -> ResultDispatcher tag model
+makeResultDispatcher : (TaggedProfile -> model -> model) -> (GetResult -> model -> model) -> (GetResult -> model -> model) -> (ScanResult -> model -> model) -> ResultDispatcher model
 makeResultDispatcher login get put scan =
   { login = login
   , get = get
@@ -70,17 +67,17 @@ makeResultDispatcher login get put scan =
 type alias Properties =
   List (String, String)
 
-type alias DynamoDatabase tag model msg =
+type alias DynamoDatabase model msg =
   { clientId : String
   , tableName : String
   , appName : String
   , roleArn : String
   , awsRegion : String
-  , backendPort : (tag -> Properties -> Cmd msg)
-  , dispatcher : ResultDispatcher tag model
+  , backendPort : (Int -> Properties -> Cmd msg)
+  , dispatcher : ResultDispatcher model
   }
 
-makeDynamoDatabase : String -> String -> String -> String -> String -> (tag -> Properties -> Cmd msg) -> (ResultDispatcher tag model) -> DynamoDatabase tag model msg
+makeDynamoDatabase : String -> String -> String -> String -> String -> (Int -> Properties -> Cmd msg) -> (ResultDispatcher model) -> DynamoDatabase model msg
 makeDynamoDatabase clientId tableName appName roleArn awsRegion backendPort dispatcher =
   { clientId = clientId
   , tableName = tableName
@@ -94,14 +91,14 @@ makeDynamoDatabase clientId tableName appName roleArn awsRegion backendPort disp
 type alias StringDict =
   Dict String String
 
-type alias SimulatedDatabase tag model msg =
+type alias SimulatedDatabase model msg =
   { getDict : (model -> StringDict)
   , setDict : (StringDict -> model -> model)
-  , simulatedPort : (tag -> Properties -> Cmd msg)
-  , dispatcher : ResultDispatcher tag model
+  , simulatedPort : (Int -> Properties -> Cmd msg)
+  , dispatcher : ResultDispatcher model
   }
 
-makeSimulatedDatabase : (model -> StringDict) -> (StringDict -> model -> model) -> (tag -> Properties -> Cmd msg) -> ResultDispatcher tag model -> SimulatedDatabase tag model msg
+makeSimulatedDatabase : (model -> StringDict) -> (StringDict -> model -> model) -> (Int -> Properties -> Cmd msg) -> ResultDispatcher model -> SimulatedDatabase model msg
 makeSimulatedDatabase getDict setDict simulatedPort dispatcher =
   { getDict = getDict
   , setDict = setDict
@@ -109,29 +106,29 @@ makeSimulatedDatabase getDict setDict simulatedPort dispatcher =
   , dispatcher = dispatcher
   }
 
-type alias Database tag model msg =
-  { dynamoDatabase : Maybe (DynamoDatabase tag model msg)
-  , simulatedDatabase : Maybe (SimulatedDatabase tag model msg)
+type alias Database model msg =
+  { dynamoDatabase : Maybe (DynamoDatabase model msg)
+  , simulatedDatabase : Maybe (SimulatedDatabase model msg)
   }
 
-makeDatabase : Maybe (DynamoDatabase tag model msg) -> Maybe (SimulatedDatabase tag model msg) -> Database tag model msg
+makeDatabase : Maybe (DynamoDatabase model msg) -> Maybe (SimulatedDatabase model msg) -> Database model msg
 makeDatabase dynamoDatabase simulatedDatabase =
   { dynamoDatabase = dynamoDatabase
   , simulatedDatabase = simulatedDatabase
   }
 
-login : tag -> Database tag model msg -> Cmd msg
+login : Int -> Database tag model msg -> Cmd msg
 login tag database =
   Cmd.none
 
-put : tag -> key -> value -> Database tag model msg -> Cmd msg
+put : Int -> key -> value -> Database tag model msg -> Cmd msg
 put tag key value database =
   Cmd.none
 
-get : tag -> key -> Database tag model msg -> Cmd msg
+get : Int -> key -> Database tag model msg -> Cmd msg
 get tag key database =
   Cmd.none
 
-scan : tag -> Database tag model msg -> Cmd msg
+scan : Int -> Database tag model msg -> Cmd msg
 scan tag database =
   Cmd.none
