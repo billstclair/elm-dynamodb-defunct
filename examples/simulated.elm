@@ -12,10 +12,10 @@
 import DynamoBackend as DB
 
 import Html exposing ( Html, Attribute
-                     , div, h1, text, input, button, a, img, p
+                     , div, h1, h2, text, input, button, a, img, p
                      , table, tr, td, th)
 import Html.Attributes exposing ( href, id, alt, src, width, height, style, value)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onClick, onInput, on, keyCode)
 import Html.App as App
 import String
 import Char
@@ -24,6 +24,7 @@ import List.Extra as LE
 import Debug exposing (log)
 import Task
 import Dict exposing (Dict)
+import Json.Decode as Json
 
 main =
   App.program
@@ -114,12 +115,16 @@ logoutReceiver database model =
   , Cmd.none
   )
 
-backendCmd : Int -> DB.Properties -> Cmd Msg
-backendCmd tag properties =
+makeMsgCmd : Msg -> Cmd Msg
+makeMsgCmd msg =
   Task.perform
     (\x -> Nop)
-    (\x -> BackendMsg tag properties)
+    (\x -> msg)
     (Task.succeed 1)
+
+backendCmd : Int -> DB.Properties -> Cmd Msg
+backendCmd tag properties =
+  makeMsgCmd <| BackendMsg tag properties
 
 setDbDict : Dict String String -> Model -> Model
 setDbDict dict model =
@@ -152,6 +157,7 @@ init =
 type Msg
   = UpdateKey String
   | UpdateValue String
+  | Keydown Int
   | Login
   | Logout
   | Get
@@ -173,6 +179,13 @@ update msg model =
       ( { model | value = value }
       , Cmd.none
       )
+    Keydown key ->
+      ( model
+      , if key == 13 then       --carriage return
+          makeMsgCmd Put
+        else
+          Cmd.none
+      )
     Login ->
       case model.profile of
         Nothing -> (model, DB.login 0 database model)
@@ -192,7 +205,7 @@ update msg model =
           DB.put 0 key model.value database model
     SetKey key ->
       ( { model | key = key }
-      , DB.get 0 key database model
+      , makeMsgCmd Get
       )
     BackendMsg tag properties ->
       case DB.update tag properties database model of
@@ -231,6 +244,10 @@ borderStyle : Attribute msg
 borderStyle =
   style [("border", "1px solid black")]
 
+onKeydown : (Int -> msg) -> Attribute msg
+onKeydown tagger =
+  on "keydown" (Json.map tagger keyCode)
+
 view : Model -> Html Msg
 view model =
   div [ style [ ("width", "40em")
@@ -241,6 +258,8 @@ view model =
       ]
     [ h1 []
         [ text "Amazon DynamoDB Backend Example" ]
+    , h2 []
+        [ text "Simulated Backend" ]
     ,case model.profile of
         Nothing ->
           div []
@@ -253,21 +272,28 @@ view model =
                  [ text <| profile.name ++ "<" ++ profile.email ++ "> "
                  , button [ onClick Logout ] [ text "Logout" ]
                  ]
-              , p []
+              , div []
                 [ text "Key: "
                 , input
                     [ onInput UpdateKey
+                    , onKeydown Keydown
                     , value model.key
                     ] []
                 , text " Value: "
                 , input
                     [ onInput UpdateValue
+                    , onKeydown Keydown
                     , value model.value
                     ] []
                 , text " "
                 , button [ onClick Put ] [ text "Put" ]
                 , text " "
                 , button [ onClick Get ] [ text "Get" ]
+                , div [ style [("color", "red")] ]
+                    [ text <| case model.error of
+                                "" -> nbsp
+                                err -> err
+                    ]
                 ]
               , table [ borderStyle ]
                 ((tr [] [ th [ borderStyle

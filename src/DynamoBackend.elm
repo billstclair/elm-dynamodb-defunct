@@ -110,24 +110,33 @@ simulatedLogin tag database model =
 
 simulatedPut : Int -> String -> String -> SimDb model msg -> model -> (model, Cmd msg)
 simulatedPut tag key value database model =
-  let dict = database.getDict model
-      model' =
-        database.setDict
-          (if value == "" then
-             Dict.remove key dict
-           else
-             Dict.insert key value dict)
-          model
-  in
-    ( model'
+  if String.startsWith "!" value then
+    -- This provides a way to test error handling
+    ( model
     , database.simulatedPort
         tag
-        [ ("tag", toString tag)
-        , ("operation", "put")
-        , ("key", key)
-        , ("value", value)
+        [ ("error", String.dropLeft 1 value)
         ]
     )
+  else
+    let dict = database.getDict model
+        model' =
+          database.setDict
+            (if value == "" then
+               Dict.remove key dict
+             else
+               Dict.insert key value dict)
+              model
+    in
+      ( model'
+      , database.simulatedPort
+          tag
+          [ ("tag", toString tag)
+          , ("operation", "put")
+          , ("key", key)
+          , ("value", value)
+          ]
+      )
 
 simulatedGet : Int -> String -> SimDb model msg -> model -> Cmd msg
 simulatedGet tag key database model =
