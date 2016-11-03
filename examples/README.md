@@ -13,6 +13,8 @@ elm reactor
 
 Then aim your browser at http://localhost:8000/simulated.elm.
 
+`simulated.elm` is also live at [kakuro-dojo.com/simulated.html](https://kakuro-dojo.com/simulated.html).
+
 ## How to use the interface
 
 The real and simulated backend examples share most of their code, with the only differences being the `h2` header and the database, real or simulated.
