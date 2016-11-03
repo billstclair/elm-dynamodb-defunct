@@ -314,6 +314,11 @@ sharedView subheader model =
       [ text "Code at: "
       , a [ href "https://github.com/billstclair/elm-dynamodb" ]
         [ text "github.com/billstclair/elm-dynamodb" ]
+      , br
+      , text "Instructions "
+      , a [ href "https://github.com/billstclair/elm-dynamodb/tree/master/examples#use" ]
+        [ text "here" ]
+      , text "."
       ]
     ]
 
