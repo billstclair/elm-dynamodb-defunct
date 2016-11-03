@@ -255,9 +255,9 @@ sharedView subheader model =
               , ("border", "solid blue")
               ]
       ]
-    [ h1 []
+    [ h1 [ style [("margin-bottom", "0")] ]
         [ text "Amazon DynamoDB Backend Example" ]
-    , h2 []
+    , h2 [ style [("margin-top", "0")] ]
         [ text subheader ]
     ,case model.profile of
         Nothing ->
