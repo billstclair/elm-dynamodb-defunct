@@ -38,6 +38,7 @@ main =
 
 type alias Model =
   { dbDict : DB.StringDict      -- used by the backend simulator
+  , database : DbType
   , profile : Maybe DB.Profile  -- Nothing until logged in
   , keys : List String          -- keys returned by DB.scan
   , valueDict : DB.StringDict   -- used by this code to cache key/value pairs
@@ -45,6 +46,11 @@ type alias Model =
   , value : String              -- displayed value input
   , error : String
   }
+
+mdb : Model -> Database
+mdb model =
+  case model.database of
+    Db res -> res
   
 profile : DB.Profile
 profile =
@@ -52,6 +58,10 @@ profile =
 
 type alias Database =
   DB.Database Model Msg
+
+-- Hack to prevent recursive type aliases
+type DbType
+  = Db Database
 
 loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
 loginReceiver profile database model =
@@ -142,6 +152,7 @@ database =
 init : (Model, Cmd msg)
 init =
   ( { dbDict = Dict.empty
+    , database = Db database
     , profile = Nothing
     , keys = []
     , valueDict = Dict.empty
@@ -188,27 +199,27 @@ update msg model =
       )
     Login ->
       case model.profile of
-        Nothing -> (model, DB.login 0 database model)
+        Nothing -> (model, DB.login 0 (mdb model) model)
         Just _ -> (model, Cmd.none)
     Logout ->
       case model.profile of
         Nothing -> (model, Cmd.none)
-        Just _ -> (model, DB.logout 0 database model)
+        Just _ -> (model, DB.logout 0 (mdb model) model)
     Get ->
       case model.key of
         "" -> (model, Cmd.none)
-        key -> (model, DB.get 0 key database model)
+        key -> (model, DB.get 0 key (mdb model) model)
     Put ->
       case model.key of
         "" -> (model, Cmd.none)
         key ->
-          DB.put 0 key model.value database model
+          DB.put 0 key model.value (mdb model) model
     SetKey key ->
       ( { model | key = key }
       , makeMsgCmd Get
       )
     BackendMsg tag properties ->
-      case DB.update tag properties database model of
+      case DB.update tag properties (mdb model) model of
         Err error ->
           -- Eventually, this will want to retry
           ( { model | error = error.message }
