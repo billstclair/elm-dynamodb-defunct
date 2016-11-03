@@ -111,7 +111,13 @@ simulatedLogin tag database model =
 simulatedPut : Int -> String -> String -> SimDb model msg -> model -> (model, Cmd msg)
 simulatedPut tag key value database model =
   let dict = database.getDict model
-      model' = database.setDict (Dict.insert key value dict) model
+      model' =
+        database.setDict
+          (if value == "" then
+             Dict.remove key dict
+           else
+             Dict.insert key value dict)
+          model
   in
     ( model'
     , database.simulatedPort
@@ -119,6 +125,7 @@ simulatedPut tag key value database model =
         [ ("tag", toString tag)
         , ("operation", "put")
         , ("key", key)
+        , ("value", value)
         ]
     )
 
@@ -334,10 +341,13 @@ updateScan properties database model =
   case getProp "keys" properties of
     Nothing ->
       Err <| otherError "Missing value in get return."
-    Just keys ->
+    Just keystr ->
       let dispatcher = getDispatcher database
+          keys = case keystr of
+                   "" -> []
+                   _ -> String.split "\\" keystr
       in
-        Ok <| dispatcher.scan (String.split "\\" keys) database model
+        Ok <| dispatcher.scan keys database model
 
 updateLogout : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateLogout properties database model =

@@ -11,12 +11,16 @@
 
 import DynamoBackend as DB
 
-import Html exposing (Html, div, h1, text, input, button, a, img, p)
-import Html.Attributes exposing (href, id, alt, src, width, height, style)
+import Html exposing ( Html, Attribute
+                     , div, h1, text, input, button, a, img, p
+                     , table, tr, td, th)
+import Html.Attributes exposing ( href, id, alt, src, width, height, style, value)
 import Html.Events exposing (onClick, onInput)
 import Html.App as App
 import String
+import Char
 import List
+import List.Extra as LE
 import Debug exposing (log)
 import Task
 import Dict exposing (Dict)
@@ -45,28 +49,51 @@ profile : DB.Profile
 profile =
   DB.Profile "someone@somewhere.net" "John Doe" "random-sequence-1234"
 
-loginReceiver : DB.Profile -> DB.Database Model Msg -> Model -> (Model, Cmd Msg)
+type alias Database =
+  DB.Database Model Msg
+
+loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
 loginReceiver profile database model =
   ( { model | profile = Just profile }
   , DB.scan 0 database model
   )
 
-getReceiver : String -> String -> DB.Database Model Msg -> Model -> (Model, Cmd Msg)
+insertInKeys : String -> List String -> List String
+insertInKeys key keys =
+  if not (List.member key keys) then
+    List.sort (key :: keys)
+  else
+    keys
+
+getReceiver : String -> String -> Database -> Model -> (Model, Cmd Msg)
 getReceiver key value database model =
-  ( { model |
-      value = value
-    , valueDict = Dict.insert key value model.valueDict
-    }
+  ( if value == "" then
+      { model | value = value }
+      else
+        { model |
+          value = value
+        , keys = insertInKeys key model.keys
+        , valueDict = Dict.insert key value model.valueDict
+        }
   , Cmd.none
   )
 
-putReceiver : String -> String -> DB.Database Model Msg -> Model -> (Model, Cmd Msg)
+putReceiver : String -> String -> Database -> Model -> (Model, Cmd Msg)
 putReceiver key value database model =
-  ( { model | valueDict = Dict.insert key value model.valueDict }
+  ( if value == "" then
+      { model |
+        keys = LE.remove key model.keys
+      , valueDict = Dict.remove key model.valueDict
+      }
+    else
+      { model |
+        keys = insertInKeys key model.keys
+      , valueDict = Dict.insert key value model.valueDict
+      }
   , Cmd.none
   )
 
-scanReceiver : List String -> DB.Database Model Msg -> Model -> (Model, Cmd Msg)
+scanReceiver : List String -> Database -> Model -> (Model, Cmd Msg)
 scanReceiver keys database model =
   ( { model |
       keys = keys
@@ -75,7 +102,7 @@ scanReceiver keys database model =
   , Cmd.none
   )
 
-logoutReceiver : DB.Database Model Msg -> Model -> (Model, Cmd Msg)
+logoutReceiver : Database -> Model -> (Model, Cmd Msg)
 logoutReceiver database model =
   ( { model |
       profile = Nothing
@@ -98,7 +125,7 @@ setDbDict : Dict String String -> Model -> Model
 setDbDict dict model =
   { model | dbDict = dict }
 
-database : DB.Database Model Msg
+database : Database
 database =
   let dispatcher =
         DB.ResultDispatcher
@@ -129,6 +156,7 @@ type Msg
   | Logout
   | Get
   | Put
+  | SetKey String
   | BackendMsg Int DB.Properties
   | Nop
 
@@ -160,9 +188,12 @@ update msg model =
     Put ->
       case model.key of
         "" -> (model, Cmd.none)
-        key -> case model.value of
-                 "" -> (model, Cmd.none)
-                 value -> DB.put 0 key value database model
+        key ->
+          DB.put 0 key model.value database model
+    SetKey key ->
+      ( { model | key = key }
+      , DB.get 0 key database model
+      )
     BackendMsg tag properties ->
       case DB.update tag properties database model of
         Err error ->
@@ -183,8 +214,22 @@ subscriptions model =
 
 -- VIEW
 
+stringFromCode : Int -> String
+stringFromCode code =
+  String.fromList [ (Char.fromCode code) ]
+
+nbsp : String
+nbsp = stringFromCode 160   -- \u00A0
+
+copyright: String
+copyright = stringFromCode 169  -- \u00A9
+
 br : Html msg
 br = Html.br [][]
+
+borderStyle : Attribute msg
+borderStyle =
+  style [("border", "1px solid black")]
 
 view : Model -> Html Msg
 view model =
@@ -194,7 +239,9 @@ view model =
               , ("border", "solid blue")
               ]
       ]
-    [ case model.profile of
+    [ h1 []
+        [ text "Amazon DynamoDB Backend Example" ]
+    ,case model.profile of
         Nothing ->
           div []
               [ button [ onClick Login ] [ text "Login" ]
@@ -202,15 +249,63 @@ view model =
         Just profile ->
           div []
               [
-               text "Key: "
-              , input [ onInput UpdateKey ] []
-              , text " Value: "
-              , input [ onInput UpdateValue ] []
+               p []
+                 [ text <| profile.name ++ "<" ++ profile.email ++ "> "
+                 , button [ onClick Logout ] [ text "Logout" ]
+                 ]
+              , p []
+                [ text "Key: "
+                , input
+                    [ onInput UpdateKey
+                    , value model.key
+                    ] []
+                , text " Value: "
+                , input
+                    [ onInput UpdateValue
+                    , value model.value
+                    ] []
+                , text " "
+                , button [ onClick Put ] [ text "Put" ]
+                , text " "
+                , button [ onClick Get ] [ text "Get" ]
+                ]
+              , table [ borderStyle ]
+                ((tr [] [ th [ borderStyle
+                             , style [("width", "10em")]
+                             ]
+                            [ text "Key" ]
+                        , th [ borderStyle
+                             , style [("width", "20em")]
+                             ]
+                          [ text "Value" ]
+                        ])
+                ::
+                   (rowLoop model.keys model.valueDict [])
+                )
+              , p []
+                [ text "Click on a key in the table to fetch its value." ]
               ]
-    , br
     , p []
       [ text "Code at: "
       , a [ href "https://github.com/billstclair/elm-dynamodb" ]
         [ text "github.com/billstclair/elm-dynamodb" ]
       ]
     ]
+
+rowLoop : List String -> DB.StringDict -> List (Html Msg) -> List (Html Msg)
+rowLoop keys dict res =
+  case keys of
+    [] -> List.reverse res
+    ( key :: tail ) ->
+      let value = case Dict.get key dict of
+                    Nothing -> nbsp
+                    Just v -> v
+          row = tr []
+                [ td [ borderStyle
+                     , onClick <| SetKey key ]
+                    [ text key ]
+                , td [ borderStyle ]
+                    [ text value ]
+                ]
+      in
+        rowLoop tail dict (row :: res)
