@@ -27,7 +27,7 @@ Entering a blank "Value" will remove that "Key" from the database.
 
 Pressing the "Get" button will look up the "Key", and show its "Value". It will also populate the value in the table.
 
-The table with "Key" and "Value" headings shows the known keys. Initially, it wont' show any values, since we only fetch the keys from the database, but if you click on one of the keys in the table, or look it up by typing it into the "Key" input field and pressing the "Get" button, it will display in the "Value" column.
+The table with "Key" and "Value" headings shows the known keys. Initially, it won't show any values, since we only fetch the keys from the database, but if you click on one of the keys in the table, or look it up by typing it into the "Key" input field and pressing the "Get" button, it will display in the "Value" column.
 
 The key/value pairs entered in the real backend example are persistent until you stop paying Amazon, or remove them. For the simulated database, they last for only one session. They do, however, survive "Logout" followed by "Login".
 
