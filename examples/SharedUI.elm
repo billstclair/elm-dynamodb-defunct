@@ -122,8 +122,8 @@ makeMsgCmd : Msg -> Cmd Msg
 makeMsgCmd msg =
   Task.perform
     (\x -> Nop)
-    (\x -> msg)
-    (Task.succeed 1)
+    identity
+    (Task.succeed msg)
 
 backendCmd : Int -> DB.Properties -> Cmd Msg
 backendCmd tag properties =
