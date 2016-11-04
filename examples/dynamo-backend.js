@@ -77,7 +77,7 @@ function getLoginCompleteResponse() {
 
 function loginCompleteInternal (response) {
   loginCompleteResponse = response; // debugging
-  var res = [["operation", "login"]];
+  var res = [["operation", "access-token"]]; // NOT "login". See DynamoBackend.elm
   var err = response.error;
   if (err) {
     res = addProperties(["error", "error_description", "error_uri"],

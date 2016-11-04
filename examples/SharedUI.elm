@@ -199,7 +199,7 @@ update msg model =
       )
     Login ->
       case model.profile of
-        Nothing -> DB.login (mdb model) model
+        Nothing -> (model, DB.login (mdb model) model)
         Just _ -> (model, Cmd.none)
     Logout ->
       case model.profile of

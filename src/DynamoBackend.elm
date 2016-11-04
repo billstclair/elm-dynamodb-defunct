@@ -1,4 +1,4 @@
-----------------------------------------------------------------------
+---------------------------------------------------------------------
 --
 -- DynamoBackend.elm
 -- Talk to Amazon's DynamoDB as a backend for an Elm web app.
@@ -24,6 +24,9 @@ import Dict exposing (Dict)
 import Result exposing (Result(..))
 import List
 import List.Extra as LE
+import Random
+
+import Debug exposing (log)
 
 type alias Profile =
   { email : String
@@ -76,6 +79,7 @@ type alias DynamoDb model msg =
   , getProperties : (model -> Properties)
   , setProperties : (Properties -> model -> model)
   , backendPort : Properties -> Cmd msg
+  , backendMsg : Properties -> msg
   , dispatcher : ResultDispatcher model msg
   }
 
@@ -94,8 +98,8 @@ type Database model msg
   = Simulated (SimDb model msg)
   | Dynamo (DynamoDb model msg)
 
-makeDynamoDb serverInfo getProperties setProperties backendPort dispatcher =
-  Dynamo <| DynamoDb serverInfo getProperties setProperties backendPort dispatcher
+makeDynamoDb serverInfo getProperties setProperties backendPort backendMsg dispatcher =
+  Dynamo <| DynamoDb serverInfo getProperties setProperties backendPort backendMsg dispatcher
 
 makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
   Simulated
@@ -114,19 +118,17 @@ simulatedInstallLoginScript : SimDb model msg -> model -> Cmd msg
 simulatedInstallLoginScript database model =
   Cmd.none                      --not necessary for simulator
 
-simulatedLogin : SimDb model msg -> model -> (model, Cmd msg)
+simulatedLogin : SimDb model msg -> model -> Cmd msg
 simulatedLogin database model =
   let profile = database.profile
   in
-    ( model
-    , database.simulatedPort
-        [ ("operation", "login")
-        , ("email", profile.email)
-        , ("name", profile.name)
-        , ("userId", profile.userId)
-        ]
-    )
-
+    database.simulatedPort
+      [ ("operation", "login")
+      , ("email", profile.email)
+      , ("name", profile.name)
+      , ("userId", profile.userId)
+      ]
+      
 simulatedPut : String -> String -> SimDb model msg -> model -> (model, Cmd msg)
 simulatedPut key value database model =
   if String.startsWith "!" value then
@@ -192,27 +194,30 @@ dynamoInstallLoginScript database model =
   database.backendPort
     [ ("operation", "installLoginScript") ]
 
-dynamoLogin : DynamoDb model msg -> model -> (model, Cmd msg)
+intGenerator : Random.Generator Int
+intGenerator = Random.int Random.minInt Random.maxInt
+
+genRandom : String -> DynamoDb model msg -> Cmd msg
+genRandom operation database =
+  Random.generate
+    (\int ->
+       database.backendMsg
+         [ ("operation", operation)
+         , ("random", toString int)
+         ]
+    )
+    intGenerator
+
+dynamoLogin : DynamoDb model msg -> model -> Cmd msg
 dynamoLogin database model =
-  let properties = database.getProperties model
-      state = toString
-              -- this should really be random, or start random
-              ( 1 + (case getProp "state" properties of
-                       Nothing -> 0
-                       Just state ->
-                         case String.toInt state of
-                           Err _ -> 0
-                           Ok int -> int
-                    )
-              )
-      model' = database.setProperties (setProp "state" state properties) model
-  in
-    ( model'
-    , database.backendPort
-        [ ("operation", "login")
-        , ("state", state)
-        ]
-    )    
+  genRandom "login-with-state" database
+
+dynamoLoginWithState : String -> DynamoDb model msg -> model -> Cmd msg
+dynamoLoginWithState state database model =
+  database.backendPort
+    [ ("operation", "login")
+    , ("state", log "login state" state)
+    ]
 
 dynamoPut : String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
 dynamoPut key value database model =
@@ -242,7 +247,7 @@ installLoginScript database model =
     Dynamo dynamoDb ->
       dynamoInstallLoginScript dynamoDb model
 
-login : Database model msg -> model -> (model, Cmd msg)
+login : Database model msg -> model -> Cmd msg
 login database model =
   case database of
     Simulated simDb ->
@@ -306,6 +311,11 @@ update properties database model =
         case operation of
           "login" ->
             updateLogin properties database model
+          "login-with-state" ->
+            updateLoginWithState properties database model
+          -- from loginCompleteInternal() in dynamo-backend.js
+          "access-token" ->
+            updateAccessToken properties database model
           "get" ->
             updateGet properties database model
           "put" ->
@@ -324,6 +334,21 @@ getDispatcher database =
   case database of
     Simulated simDb -> simDb.dispatcher
     Dynamo dynDb -> dynDb.dispatcher
+
+updateLoginWithState : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
+updateLoginWithState properties database model =
+  case database of
+    Simulated _ -> Ok (model, Cmd.none)
+    Dynamo dynDb ->
+      let state = case getProp "random" properties of
+                    Nothing -> "foo"
+                    Just s -> s
+      in
+        Ok (model, dynamoLoginWithState state dynDb model)
+
+updateAccessToken : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
+updateAccessToken properties database model =
+  Ok (model, Cmd.none)
 
 updateLogin : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateLogin properties database model =

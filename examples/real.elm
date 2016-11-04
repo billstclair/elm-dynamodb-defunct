@@ -38,7 +38,8 @@ port dynamoResponse : (DB.Properties -> msg) -> Sub msg
 init : DB.DynamoServerInfo -> (Model, Cmd Msg)
 init serverInfo =
   let database = DB.makeDynamoDb
-                 serverInfo getProperties setProperties dynamoRequest dispatcher
+                   serverInfo getProperties setProperties
+                   dynamoRequest BackendMsg dispatcher
   in
     let (model, cmd) = sharedInit database
     in
