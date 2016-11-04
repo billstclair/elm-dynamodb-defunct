@@ -13,15 +13,16 @@ module DynamoBackend exposing ( Profile, Properties, StringDict
                               , Database, ResultDispatcher
                               , ErrorType(..), Error
                               , getProp
-                              , DynamoServerInfo , makeDynamoDb
+                              , DynamoServerInfo , makeDynamoDb, isRealDatabase
                               , makeSimulatedDb
-                              , login, put, get, scan, logout
+                              , installLoginScript, login, put, get, scan, logout
                               , update
                               )
 
 import String
 import Dict exposing (Dict)
 import Result exposing (Result(..))
+import List
 import List.Extra as LE
 
 type alias Profile =
@@ -45,7 +46,7 @@ type alias ResultDispatcher model msg =
   , get : (String -> String -> Database model msg -> model -> (model, Cmd msg))
   , put : (String -> String -> Database model msg -> model -> (model, Cmd msg))
   , scan : (List String -> Database model msg -> model -> (model, Cmd msg))
-  , logout : ( Database model msg -> model -> (model, Cmd msg))
+  , logout : (Database model msg -> model -> (model, Cmd msg))
   }
 
 type alias Properties =
@@ -56,6 +57,10 @@ getProp key properties =
   case LE.find (\a -> key == (fst a)) properties of
     Nothing -> Nothing
     Just (k, v) -> Just v
+
+setProp : String -> String -> Properties -> Properties
+setProp key value properties =
+  (key, value) :: (List.filter (\(k, _) -> k /= key) properties)
 
 type alias DynamoServerInfo =
   { clientId : String
@@ -68,6 +73,8 @@ type alias DynamoServerInfo =
 
 type alias DynamoDb model msg =
   { serverInfo : DynamoServerInfo
+  , getProperties : (model -> Properties)
+  , setProperties : (Properties -> model -> model)
   , backendPort : Properties -> Cmd msg
   , dispatcher : ResultDispatcher model msg
   }
@@ -87,27 +94,38 @@ type Database model msg
   = Simulated (SimDb model msg)
   | Dynamo (DynamoDb model msg)
 
-makeDynamoDb serverInfo backendPort dispatcher =
-  Dynamo <| DynamoDb serverInfo backendPort dispatcher
+makeDynamoDb serverInfo getProperties setProperties backendPort dispatcher =
+  Dynamo <| DynamoDb serverInfo getProperties setProperties backendPort dispatcher
 
 makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
   Simulated
     (SimDb profile getDict setDict simulatedPort dispatcher)
 
+isRealDatabase : Database model msg -> Bool
+isRealDatabase database =
+  case database of
+    Simulated _ -> False
+    Dynamo _ -> True
 ---
 --- Simulated database API
 ---
 
-simulatedLogin : SimDb model msg -> model -> Cmd msg
+simulatedInstallLoginScript : SimDb model msg -> model -> Cmd msg
+simulatedInstallLoginScript database model =
+  Cmd.none                      --not necessary for simulator
+
+simulatedLogin : SimDb model msg -> model -> (model, Cmd msg)
 simulatedLogin database model =
   let profile = database.profile
   in
-    database.simulatedPort
-      [ ("operation", "login")
-      , ("email", profile.email)
-      , ("name", profile.name)
-      , ("userId", profile.userId)
-      ]
+    ( model
+    , database.simulatedPort
+        [ ("operation", "login")
+        , ("email", profile.email)
+        , ("name", profile.name)
+        , ("userId", profile.userId)
+        ]
+    )
 
 simulatedPut : String -> String -> SimDb model msg -> model -> (model, Cmd msg)
 simulatedPut key value database model =
@@ -169,9 +187,32 @@ simulatedLogout database model =
 -- Real database API. Not done yet.
 --
 
-dynamoLogin : DynamoDb model msg -> model -> Cmd msg
+dynamoInstallLoginScript : DynamoDb model msg -> model -> Cmd msg
+dynamoInstallLoginScript database model =
+  database.backendPort
+    [ ("operation", "installLoginScript") ]
+
+dynamoLogin : DynamoDb model msg -> model -> (model, Cmd msg)
 dynamoLogin database model =
-  Cmd.none
+  let properties = database.getProperties model
+      state = toString
+              -- this should really be random, or start random
+              ( 1 + (case getProp "state" properties of
+                       Nothing -> 0
+                       Just state ->
+                         case String.toInt state of
+                           Err _ -> 0
+                           Ok int -> int
+                    )
+              )
+      model' = database.setProperties (setProp "state" state properties) model
+  in
+    ( model'
+    , database.backendPort
+        [ ("operation", "login")
+        , ("state", state)
+        ]
+    )    
 
 dynamoPut : String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
 dynamoPut key value database model =
@@ -193,7 +234,15 @@ dynamoLogout database model =
 -- User-visible database API
 --
 
-login : Database model msg -> model -> Cmd msg
+installLoginScript : Database model msg -> model -> Cmd msg
+installLoginScript database model =
+  case database of
+    Simulated simDb ->
+      simulatedInstallLoginScript simDb model
+    Dynamo dynamoDb ->
+      dynamoInstallLoginScript dynamoDb model
+
+login : Database model msg -> model -> (model, Cmd msg)
 login database model =
   case database of
     Simulated simDb ->

@@ -12,6 +12,7 @@
 module SharedUI exposing ( Model, Msg (..), Database
                          , sharedInit, sharedView, update
                          , dispatcher, makeMsgCmd, backendCmd
+                         , getProperties, setProperties
                          , getDbDict, setDbDict)
 
 import DynamoBackend as DB
@@ -36,6 +37,7 @@ import Json.Decode as Json
 type alias Model =
   { dbDict : DB.StringDict      -- used by the backend simulator
   , database : DbType
+  , properties : DB.Properties  -- For DynamoBackend private state
   , profile : Maybe DB.Profile  -- Nothing until logged in
   , keys : List String          -- keys returned by DB.scan
   , valueDict : DB.StringDict   -- used by this code to cache key/value pairs
@@ -48,6 +50,12 @@ mdb : Model -> Database
 mdb model =
   case model.database of
     Db res -> res
+
+getProperties = .properties
+
+setProperties : DB.Properties -> Model -> Model
+setProperties properties model =
+  { model | properties = properties }
   
 type alias Database =
   DB.Database Model Msg
@@ -140,10 +148,11 @@ setDbDict : Dict String String -> Model -> Model
 setDbDict dict model =
   { model | dbDict = dict }
 
-sharedInit : Database -> (Model, Cmd msg)
+sharedInit : Database -> (Model, Cmd Msg)
 sharedInit database =
   ( { dbDict = Dict.empty
     , database = Db database
+    , properties = []
     , profile = Nothing
     , keys = []
     , valueDict = Dict.empty
@@ -190,7 +199,7 @@ update msg model =
       )
     Login ->
       case model.profile of
-        Nothing -> (model, DB.login (mdb model) model)
+        Nothing -> DB.login (mdb model) model
         Just _ -> (model, Cmd.none)
     Logout ->
       case model.profile of
@@ -247,6 +256,20 @@ onKeydown : (Int -> msg) -> Attribute msg
 onKeydown tagger =
   on "keydown" (Json.map tagger keyCode)
 
+loginButton : Model -> Html Msg
+loginButton model =
+  if DB.isRealDatabase <| mdb model then
+    img [ onClick Login
+        , style [ ("border", "0") ]
+        , alt "Login with Amazon"
+        , src "https://images-na.ssl-images-amazon.com/images/G/01/lwa/btnLWA_gold_156x32.png"
+        , width 156
+        , height 32
+        ]
+        []
+  else
+    button [ onClick Login ] [ text "Login" ]    
+    
 sharedView : String -> Model -> Html Msg
 sharedView subheader model =
   div [ style [ ("width", "40em")
@@ -257,13 +280,13 @@ sharedView subheader model =
       ]
     [ h1 [ style [("margin-bottom", "0")] ]
         [ text "Amazon DynamoDB Backend Example" ]
+    , div [ id "amazon-root" ] [] --this id is required by the Amazon JavaScript
     , h2 [ style [("margin-top", "0")] ]
         [ text subheader ]
     ,case model.profile of
         Nothing ->
           div []
-              [ button [ onClick Login ] [ text "Login" ]
-              ]
+              [ loginButton model ]
         Just profile ->
           div []
               [
