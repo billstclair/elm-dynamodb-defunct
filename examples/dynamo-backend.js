@@ -10,9 +10,9 @@
 //////////////////////////////////////////////////////////////////////
 
 // The single global variable defined by this file
-var dynamoBackend = {}
+var dynamoBackend = {};
 
-function () {
+(function() {
 
 // External entry points
 dynamoBackend.dispatch = dispatch;
@@ -71,7 +71,7 @@ function addProperties (names, obj, arr) {
 
 // Debugging
 var loginCompleteResponse = null;
-getLoginCompleteResponse() {
+function getLoginCompleteResponse() {
   return loginCompleteResponse;
 }
 
@@ -196,7 +196,7 @@ function scanKeys(user, callback) {
         ComparisonOperator: 'BEGINS_WITH',
         AttributeValueList: [
           {
-            S: appkey('');
+            S: appkey('')
           }
         ]
       }
@@ -256,8 +256,8 @@ function dispatch(properties, port) {
       var res = [["operation", operation],
                  ["error", "unknown operation: " + operation]
                 ]
-      port.send res;
+      port.send(res);
   }
 }
 
-}();   // Execute the enclosing function()
+})();   // Execute the enclosing function()
