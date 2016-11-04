@@ -11,7 +11,7 @@
 
 import SharedUI exposing ( Model, Msg(BackendMsg), Database
                          , sharedInit, sharedView, update
-                         , makeMsgCmd
+                         , backendCmd
                          , getDbDict, setDbDict, dispatcher
                          )
 import DynamoBackend as DB
@@ -32,10 +32,6 @@ main =
 profile : DB.Profile
 profile =
   DB.Profile "someone@somewhere.net" "John Doe" "random-sequence-1234"
-
-backendCmd : Int -> DB.Properties -> Cmd Msg
-backendCmd tag properties =
-  makeMsgCmd <| BackendMsg tag properties
 
 database : Database
 database =

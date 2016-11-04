@@ -11,9 +11,10 @@
 
 module DynamoBackend exposing ( Profile, Properties, StringDict
                               , Database, ResultDispatcher
-                              , ErrorType (..), Error
+                              , ErrorType(..), Error
                               , getProp
-                              , makeDynamoDb, makeSimulatedDb
+                              , DynamoServerInfo , makeDynamoDb
+                              , makeSimulatedDb
                               , login, put, get, scan, logout
                               , update
                               )
@@ -32,7 +33,6 @@ type alias Profile =
 type ErrorType
   = Timeout
   | LoginExpired
-  | TagMismatch Int Int
   | Other
 
 type alias Error =
@@ -57,13 +57,17 @@ getProp key properties =
     Nothing -> Nothing
     Just (k, v) -> Just v
 
-type alias DynamoDb model msg =
+type alias DynamoServerInfo =
   { clientId : String
   , tableName : String
   , appName : String
   , roleArn : String
   , awsRegion : String
-  , backendPort : (Int -> Properties -> Cmd msg)
+  }
+
+type alias DynamoDb model msg =
+  { serverInfo : DynamoServerInfo
+  , backendPort : Properties -> Cmd msg
   , dispatcher : ResultDispatcher model msg
   }
 
@@ -74,7 +78,7 @@ type alias SimDb model msg =
   { profile: Profile
   , getDict : (model -> StringDict)
   , setDict : (StringDict -> model -> model)
-  , simulatedPort : (Int -> Properties -> Cmd msg)
+  , simulatedPort : (Properties -> Cmd msg)
   , dispatcher : ResultDispatcher model msg
   }
 
@@ -82,10 +86,8 @@ type Database model msg
   = Simulated (SimDb model msg)
   | Dynamo (DynamoDb model msg)
 
-makeDynamoDb cliendId tableName appName roleArn awsRegion backendPort dispatcher =
-  Dynamo
-    (DynamoDb
-       cliendId tableName appName roleArn awsRegion backendPort dispatcher)
+makeDynamoDb serverInfo backendPort dispatcher =
+  Dynamo <| DynamoDb serverInfo backendPort dispatcher
 
 makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
   Simulated
@@ -95,26 +97,23 @@ makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
 --- Simulated database API
 ---
 
-simulatedLogin : Int -> SimDb model msg -> model -> Cmd msg
-simulatedLogin tag database model =
+simulatedLogin : SimDb model msg -> model -> Cmd msg
+simulatedLogin database model =
   let profile = database.profile
   in
     database.simulatedPort
-      tag
-      [ ("tag", toString tag)
-      , ("operation", "login")
+      [ ("operation", "login")
       , ("email", profile.email)
       , ("name", profile.name)
       , ("userId", profile.userId)
       ]
 
-simulatedPut : Int -> String -> String -> SimDb model msg -> model -> (model, Cmd msg)
-simulatedPut tag key value database model =
+simulatedPut : String -> String -> SimDb model msg -> model -> (model, Cmd msg)
+simulatedPut key value database model =
   if String.startsWith "!" value then
     -- This provides a way to test error handling
     ( model
     , database.simulatedPort
-        tag
         [ ("error", String.dropLeft 1 value)
         ]
     )
@@ -130,116 +129,108 @@ simulatedPut tag key value database model =
     in
       ( model'
       , database.simulatedPort
-          tag
-          [ ("tag", toString tag)
-          , ("operation", "put")
+          [ ("operation", "put")
           , ("key", key)
           , ("value", value)
           ]
       )
 
-simulatedGet : Int -> String -> SimDb model msg -> model -> Cmd msg
-simulatedGet tag key database model =
+simulatedGet : String -> SimDb model msg -> model -> Cmd msg
+simulatedGet key database model =
   let dict = database.getDict model
       value = case Dict.get key dict of
                 Nothing -> ""
                 Just v -> v
   in
     database.simulatedPort
-      tag
-      [ ("tag", toString tag)
-      , ("operation", "get")
+      [ ("operation", "get")
       , ("key", key)
       , ("value", value)
       ]
 
-simulatedScan : Int -> SimDb model msg -> model -> Cmd msg
-simulatedScan tag database model =
+simulatedScan : SimDb model msg -> model -> Cmd msg
+simulatedScan database model =
   let dict = database.getDict model
       keys = String.join "\\" (Dict.keys dict)
   in
     database.simulatedPort
-      tag
-      [ ("tag", toString tag)
-      , ("operation", "scan")
+      [ ("operation", "scan")
       , ("keys", keys)
       ]
 
-simulatedLogout : Int -> SimDb model msg -> model -> Cmd msg
-simulatedLogout tag database model =
+simulatedLogout : SimDb model msg -> model -> Cmd msg
+simulatedLogout database model =
   database.simulatedPort
-    tag
-    [ ("tag", toString tag)
-    , ("operation", "logout")
+    [ ("operation", "logout")
     ]
 
 --
 -- Real database API. Not done yet.
 --
 
-dynamoLogin : Int -> DynamoDb model msg -> model -> Cmd msg
-dynamoLogin tag database model =
+dynamoLogin : DynamoDb model msg -> model -> Cmd msg
+dynamoLogin database model =
   Cmd.none
 
-dynamoPut : Int -> String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
-dynamoPut tag key value database model =
+dynamoPut : String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
+dynamoPut key value database model =
   (model, Cmd.none)
 
-dynamoGet : Int -> String -> DynamoDb model msg -> model -> Cmd msg
-dynamoGet tag key database model =
+dynamoGet : String -> DynamoDb model msg -> model -> Cmd msg
+dynamoGet key database model =
   Cmd.none
 
-dynamoScan : Int -> DynamoDb model msg -> model -> Cmd msg
-dynamoScan tag database model =
+dynamoScan : DynamoDb model msg -> model -> Cmd msg
+dynamoScan database model =
   Cmd.none
 
-dynamoLogout : Int -> DynamoDb model msg -> model -> Cmd msg
-dynamoLogout tag database model =
+dynamoLogout : DynamoDb model msg -> model -> Cmd msg
+dynamoLogout database model =
   Cmd.none
 
 --
 -- User-visible database API
 --
 
-login : Int -> Database model msg -> model -> Cmd msg
-login tag database model =
+login : Database model msg -> model -> Cmd msg
+login database model =
   case database of
     Simulated simDb ->
-      simulatedLogin tag simDb model
+      simulatedLogin simDb model
     Dynamo dynamoDb ->
-      dynamoLogin tag dynamoDb model
+      dynamoLogin dynamoDb model
 
-put : Int -> String -> String -> Database model msg -> model -> (model, Cmd msg)
-put tag key value database model =
+put : String -> String -> Database model msg -> model -> (model, Cmd msg)
+put key value database model =
   case database of
     Simulated simDb ->
-      simulatedPut tag key value simDb model
+      simulatedPut key value simDb model
     Dynamo dynamoDb ->
-      dynamoPut tag key value dynamoDb model
+      dynamoPut key value dynamoDb model
 
-get : Int -> String -> Database model msg -> model -> Cmd msg
-get tag key database model =
+get : String -> Database model msg -> model -> Cmd msg
+get key database model =
   case database of
     Simulated simDb ->
-      simulatedGet tag key simDb model
+      simulatedGet key simDb model
     Dynamo dynamoDb ->
-      dynamoGet tag key dynamoDb model
+      dynamoGet key dynamoDb model
 
-scan : Int -> Database model msg -> model -> Cmd msg
-scan tag database model =
+scan : Database model msg -> model -> Cmd msg
+scan database model =
   case database of
     Simulated simDb ->
-      simulatedScan tag simDb model
+      simulatedScan simDb model
     Dynamo dynamoDb ->
-      dynamoScan tag dynamoDb model
+      dynamoScan dynamoDb model
 
-logout : Int -> Database model msg -> model -> Cmd msg
-logout tag database model =
+logout : Database model msg -> model -> Cmd msg
+logout database model =
   case database of
     Simulated simDb ->
-      simulatedLogout tag simDb model
+      simulatedLogout simDb model
     Dynamo dynamoDb ->
-      dynamoLogout tag dynamoDb model
+      dynamoLogout dynamoDb model
 
 --
 -- Call this from the command that comes from the DynamoDb port or the simulator
@@ -251,43 +242,32 @@ otherError message =
   , message = message
   }
 
-update : Int -> Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
-update tag properties database model =
-  let wasTag = case getProp "tag" properties of
-                 Nothing -> 0
-                 Just et -> case String.toInt et of
-                              Err s -> 0
-                              Ok i -> i
-  in
-    if tag /= 0 && tag /= wasTag then
-      Err { errorType = TagMismatch tag wasTag
-          , message = "Tag mismatch, expected: " ++ (toString tag) ++ ", was: " ++ (toString wasTag)
-          }
-    else
-      case getProp "error" properties of
-        Just err ->
-          -- This needs more fleshing out
-          Err <| otherError <| "Backend error: " ++ err
-        Nothing ->
-          let operation = case getProp "operation" properties of
-                            Nothing -> "missing"
-                            Just op -> op
-          in
-            case operation of
-              "login" ->
-                updateLogin properties database model
-              "get" ->
-                updateGet properties database model
-              "put" ->
-                updatePut properties database model
-              "scan" ->
-                updateScan properties database model
-              "logout" ->
-                updateLogout properties database model
-              "missing" ->
-                Err <| otherError "Missing operation in properties."
-              _ ->
-                Err  <| otherError <| "Unknown operation: " ++ operation
+update : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
+update properties database model =
+  case getProp "error" properties of
+    Just err ->
+      -- This needs more fleshing out
+      Err <| otherError <| "Backend error: " ++ err
+    Nothing ->
+      let operation = case getProp "operation" properties of
+                        Nothing -> "missing"
+                        Just op -> op
+      in
+        case operation of
+          "login" ->
+            updateLogin properties database model
+          "get" ->
+            updateGet properties database model
+          "put" ->
+            updatePut properties database model
+          "scan" ->
+            updateScan properties database model
+          "logout" ->
+            updateLogout properties database model
+          "missing" ->
+            Err <| otherError "Missing operation in properties."
+          _ ->
+            Err  <| otherError <| "Unknown operation: " ++ operation
             
 getDispatcher : Database model msg -> ResultDispatcher model msg
 getDispatcher database =

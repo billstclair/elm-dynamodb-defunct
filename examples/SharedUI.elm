@@ -11,7 +11,7 @@
 
 module SharedUI exposing ( Model, Msg (..), Database
                          , sharedInit, sharedView, update
-                         , dispatcher, makeMsgCmd
+                         , dispatcher, makeMsgCmd, backendCmd
                          , getDbDict, setDbDict)
 
 import DynamoBackend as DB
@@ -59,7 +59,7 @@ type DbType
 loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
 loginReceiver profile database model =
   ( { model | profile = Just profile }
-  , DB.scan 0 database model
+  , DB.scan database model
   )
 
 insertInKeys : String -> List String -> List String
@@ -125,9 +125,9 @@ makeMsgCmd msg =
     identity
     (Task.succeed msg)
 
-backendCmd : Int -> DB.Properties -> Cmd Msg
-backendCmd tag properties =
-  makeMsgCmd <| BackendMsg tag properties
+backendCmd : DB.Properties -> Cmd Msg
+backendCmd properties =
+  makeMsgCmd <| BackendMsg properties
 
 dispatcher : DB.ResultDispatcher Model Msg
 dispatcher =
@@ -165,7 +165,7 @@ type Msg
   | Get
   | Put
   | SetKey String
-  | BackendMsg Int DB.Properties
+  | BackendMsg DB.Properties
   | Nop
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -190,27 +190,27 @@ update msg model =
       )
     Login ->
       case model.profile of
-        Nothing -> (model, DB.login 0 (mdb model) model)
+        Nothing -> (model, DB.login (mdb model) model)
         Just _ -> (model, Cmd.none)
     Logout ->
       case model.profile of
         Nothing -> (model, Cmd.none)
-        Just _ -> (model, DB.logout 0 (mdb model) model)
+        Just _ -> (model, DB.logout (mdb model) model)
     Get ->
       case model.key of
         "" -> (model, Cmd.none)
-        key -> (model, DB.get 0 key (mdb model) model)
+        key -> (model, DB.get key (mdb model) model)
     Put ->
       case model.key of
         "" -> (model, Cmd.none)
         key ->
-          DB.put 0 key model.value (mdb model) model
+          DB.put key model.value (mdb model) model
     SetKey key ->
       ( { model | key = key }
       , makeMsgCmd Get
       )
-    BackendMsg tag properties ->
-      case DB.update tag properties (mdb model) model of
+    BackendMsg properties ->
+      case DB.update properties (mdb model) model of
         Err error ->
           -- Eventually, this will want to retry
           ( { model | error = error.message }
