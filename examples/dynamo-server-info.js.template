@@ -1,0 +1,22 @@
+//////////////////////////////////////////////////////////////////////
+//
+// dynamo-server-info.js.template
+// Template for user-specific server information.
+// Modify for your server and save as dynamo-server-info.js
+// Copyright (c) 2016 Bill St. Clair <billstclair@gmail.com>
+// Some rights reserved.
+// Distributed under the MIT License
+// See LICENSE.txt
+//
+//////////////////////////////////////////////////////////////////////
+
+// You need to fill in your application-specific information here
+// *** I need to document where these are found/created ***
+var dynamoServerInfo =
+    { clientId: 'amzn1.application-oa2-client.xxx'
+      tableName: 'mytable',
+      appName: 'myappname',
+      roleArn: 'arn:aws:iam::xxx:role/yyy',
+      providerId: 'www.amazon.com',
+      awsRegion: 'us-east-1'
+    }

@@ -1,0 +1,64 @@
+<!---------------------------------------------------------------------
+--
+-- dynamodb-example.html
+-- Startup html file for Amazon DynamoDB example.
+-- Copyright (c) 2016 Bill St. Clair <billstclair@gmail.com>
+-- Some rights reserved.
+-- Distributed under the MIT License
+-- See LICENSE.txt
+--
+----------------------------------------------------------------------->
+
+<html>
+<head>
+<title>DynamoDB via Amazon SDK in the Browser</title>
+<script type='text/javascript' src='https://sdk.amazonaws.com/js/aws-sdk-2.6.12.min.js'></script>
+<!-- dynamo-server-info.js contains information about your Dynamo app.
+  -- It must be loaded before dynamodb-backend.js
+  -->
+<script type='text/javascript' src='dynamo-server-info.js'></script>
+<script type='text/javascript' src='dynamodb-backend.js'></script>
+<!-- Change Main.js to the file name into which you compile your Elm code. -->
+<script type='text/javascript' src='Main.js'></script>
+</head>
+<body>
+
+<script type="text/javascript">
+
+//
+// This script assumes that your main Elm file declares itself as:
+//
+//    port module Main
+//
+// It also assumes that the port used to send information here is named
+// dynamoRequest and the port used to respond is names dynamoResponse.
+// Both take a property list as single arg:
+//
+// type alias Properties =
+//   List (String, String)
+//
+// port dynamoRequest : Properties -> Cmd msg
+// port dynamoResponse : (Properties -> msg) -> Sub msg
+//
+// If you need to name your main module something other than Main
+// or to name your ports something other than dynamoRequest & dynamoResponse,
+// you'll have to edit those appropriately.
+//
+
+// Start the Elm app.
+// dynamoServerInfo is defined by dynamo-server-info.js
+// Assumes a full screen app. If you need to embed, change it
+// appropriately.
+var app = Elm.Main.fullscreen(dynamoServerInfo);
+
+var responsePort = app.ports.dynamoResponse;
+
+// Elm Ports
+app.ports.dynamoRequest.subscribe(function(properties) {
+  dynamoBackend.dispatch(properties, responsePort);
+});
+
+</script>
+
+</body>
+</html>

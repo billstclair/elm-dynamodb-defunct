@@ -62,6 +62,7 @@ type alias DynamoServerInfo =
   , tableName : String
   , appName : String
   , roleArn : String
+  , providerId: String
   , awsRegion : String
   }
 
