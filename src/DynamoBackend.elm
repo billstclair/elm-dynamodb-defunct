@@ -334,7 +334,12 @@ dynamoScan database model =
 
 dynamoLogout : DynamoDb model msg -> model -> Cmd msg
 dynamoLogout database model =
-  Cmd.none
+  let props = [("operation", "logout")]
+  in
+    Cmd.batch
+      [ database.backendPort props
+      , makeMsgCmd <| database.backendMsg props
+      ]
 
 --
 -- User-visible database API
@@ -522,3 +527,4 @@ updateLogout properties database model =
   let dispatcher = getDispatcher database
   in
     Ok <| dispatcher.logout database model
+

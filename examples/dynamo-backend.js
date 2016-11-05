@@ -252,6 +252,11 @@ function dispatch(properties, port) {
       // Properties sent: state, access_token, token_type, expires_in, scope
       login(props.state, port);
       break;
+    case "logout":
+      // Properties expected: none
+      // Properties sent: Nothing sent
+      amazon.Login.logout();
+      break;
     default:
       var res = [["operation", operation],
                  ["error", "unknown operation: " + operation]
