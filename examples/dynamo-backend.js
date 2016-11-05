@@ -308,7 +308,7 @@ function dispatch(properties, port) {
       deleteItem(props.user, props.key, function(err, data) {
         var res;
         if (err) {
-          res = errorProperties("get", err);
+          res = errorProperties("delete", err);
         } else {
           res = properties;
         }
