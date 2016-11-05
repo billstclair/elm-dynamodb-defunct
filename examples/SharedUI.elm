@@ -20,8 +20,7 @@ import DynamoBackend as DB
 import Html exposing ( Html, Attribute
                      , div, h1, h2, text, input, button, a, img, p
                      , table, tr, td, th)
-import Html.Attributes exposing ( href, id, alt, src, width, height
-                                , style, class, value)
+import Html.Attributes exposing ( href, id, alt, src, width, height, style, value)
 import Html.Events exposing (onClick, onInput, on, keyCode)
 import Html.App as App
 import String
@@ -204,14 +203,20 @@ update msg model =
         Nothing -> (model, Cmd.none)
         Just _ -> (model, DB.logout (mdb model) model)
     Get ->
-      case model.key of
-        "" -> (model, Cmd.none)
-        key -> (model, DB.get key (mdb model) model)
+      case model.profile of
+        Nothing -> (model, Cmd.none)
+        Just profile ->
+          case model.key of
+            "" -> (model, Cmd.none)
+            key -> (model, DB.get profile.userId key (mdb model) model)
     Put ->
-      case model.key of
-        "" -> (model, Cmd.none)
-        key ->
-          DB.put key model.value (mdb model) model
+      case model.profile of
+        Nothing -> (model, Cmd.none)
+        Just profile ->
+          case model.key of
+            "" -> (model, Cmd.none)
+            key ->
+              DB.put profile.userId key model.value (mdb model) model
     SetKey key ->
       ( { model | key = key }
       , makeMsgCmd Get

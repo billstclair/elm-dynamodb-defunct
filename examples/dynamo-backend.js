@@ -116,18 +116,23 @@ function appkey(key) {
   return appName + ":" + key;
 }
 
+function stripAppkey(appkey) {
+  var cnt = appName.length + 1;
+  return appkey.substring(cnt);
+}
+
 // DynamoDB access functions
-function updateItem(keys, value, callback) {
+function updateItem(user, key, value, callback) {
   if (callback === undefined) {
     callback = debugCallback;
   }
   var params = {
     Key: {
       user: {
-        S: keys.user
+        S: user
       },
       appkey: {
-        S: appkey(keys.key)
+        S: appkey(key)
       }
     },
     TableName: tableName,
@@ -143,17 +148,17 @@ function updateItem(keys, value, callback) {
   dynamodb.updateItem(params, callback);
 }
 
-function getItem(keys, callback) {
+function getItem(user, key, callback) {
   if (callback === undefined) {
     callback = debugCallback;
   }
   var params = {
     Key: {
       user: {
-        S: keys.user
+        S: user
       },
       appkey: {
-        S: appkey(keys.key)
+        S: appkey(key)
       }
     },
     TableName: tableName,
@@ -164,17 +169,17 @@ function getItem(keys, callback) {
   dynamodb.getItem(params, callback);
 }
 
-function deleteItem(keys, callback) {
+function deleteItem(user, key, callback) {
   if (callback === undefined) {
     callback = debugCallback;
   }
   var params = {
     Key: {
       user: {
-        S: keys.user
+        S: user
       },
       appkey: {
-        S: appkey(keys.key)
+        S: appkey(key)
       }
     },
     TableName: tableName,
@@ -182,7 +187,7 @@ function deleteItem(keys, callback) {
   dynamodb.deleteItem(params, callback);
 }
 
-function scanKeys(user, callback) {
+function scanKeys(callback) {
   if (callback === undefined) {
     callback = debugCallback;
   }
@@ -232,6 +237,14 @@ function propertiesToObject(properties) {
   return res;
 }
 
+function errorProperties(operation, err) {
+  return [ ["operation", operation],
+           ["code", err.code],
+           ["error", err.message]
+         ];
+}
+
+
 // The top-level entry-point. Called from the users's HTML file.
 // Properties is an array of two-element arrays: [[key, value],...]
 // In Elm, that's [(key, value), ...]
@@ -256,6 +269,72 @@ function dispatch(properties, port) {
       // Properties expected: none
       // Properties sent: Nothing sent
       amazon.Login.logout();
+      break;
+    case "put":
+      // Properties expected: user, key, value
+      // Properties sent: user, key, value
+      updateItem(props.user, props.key, props.value, function(err, data) {
+        var res;
+        if (err) {
+          res = errorProperties("put", err);
+        } else {
+          res = properties;
+        }
+        port.send(res);
+      });
+      break;
+    case "get":
+      // Properties expected: user, key
+      // Properties sent: user, key
+      getItem(props.user, props.key, function(err, data) {
+        var res;
+        if (err) {
+          res = errorProperties("get", err);
+        } else {
+          var value = data.Item.value.S;
+          res = properties;
+          if (value) {
+            res.push(["value", value]);
+          } else {
+            res.push(["error", "Missing value"]);
+          }
+        }
+        port.send(res);
+      });
+      break;
+    case "delete":
+      // Properties expected: user, key
+      // Properties sent: user, key
+      deleteItem(props.user, props.key, function(err, data) {
+        var res;
+        if (err) {
+          res = errorProperties("get", err);
+        } else {
+          res = properties;
+        }
+        port.send(res);
+      });
+      break;
+    case "scan":
+      // Properties expected: none
+      // Properties sent: ["", key] for each key
+      scanKeys(function (err, data) {
+        var res;
+        if (err) {
+          res = errorProperties("scan", err);
+        } else {
+          res = properties;
+          var items = data.Items;
+          for (var idx in items) {
+            var item = items[idx];
+            var value = item.appkey.S;
+            if (value) {
+              res.push(["", stripAppkey(value)])
+            }
+          }
+        }
+        port.send(res);
+      });
       break;
     default:
       var res = [["operation", operation],

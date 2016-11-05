@@ -185,12 +185,10 @@ simulatedGet key database model =
 simulatedScan : SimDb model msg -> model -> Cmd msg
 simulatedScan database model =
   let dict = database.getDict model
-      keys = String.join "\\" (Dict.keys dict)
+      keys = List.map (\key -> ("", key)) (Dict.keys dict)
   in
     database.simulatedPort
-      [ ("operation", "scan")
-      , ("keys", keys)
-      ]
+      <| setProp "operation" "scan" keys
 
 simulatedLogout : SimDb model msg -> model -> Cmd msg
 simulatedLogout database model =
@@ -320,17 +318,29 @@ dynamoAccessToken properties database model =
             , getAmazonUserProfile accessToken database
             )
 
-dynamoPut : String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
-dynamoPut key value database model =
-  (model, Cmd.none)
+dynamoPut : String -> String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
+dynamoPut userId key value database model =
+  ( model
+  , database.backendPort
+      [ ("operation", if value == "" then "delete" else "put")
+      , ("user", userId)
+      , ("key", key)
+      , ("value", value)
+      ]
+  )
 
-dynamoGet : String -> DynamoDb model msg -> model -> Cmd msg
-dynamoGet key database model =
-  Cmd.none
+dynamoGet : String -> String -> DynamoDb model msg -> model -> Cmd msg
+dynamoGet userId key database model =
+  database.backendPort
+    [ ("operation", "get")
+    , ("user", userId)
+    , ("key", key)
+    ]
 
 dynamoScan : DynamoDb model msg -> model -> Cmd msg
 dynamoScan database model =
-  Cmd.none
+  database.backendPort
+    [ ("operation", "scan") ]
 
 dynamoLogout : DynamoDb model msg -> model -> Cmd msg
 dynamoLogout database model =
@@ -361,21 +371,21 @@ login database model =
     Dynamo dynamoDb ->
       dynamoLogin dynamoDb model
 
-put : String -> String -> Database model msg -> model -> (model, Cmd msg)
-put key value database model =
+put : String -> String -> String -> Database model msg -> model -> (model, Cmd msg)
+put userId key value database model =
   case database of
     Simulated simDb ->
       simulatedPut key value simDb model
     Dynamo dynamoDb ->
-      dynamoPut key value dynamoDb model
+      dynamoPut userId key value dynamoDb model
 
-get : String -> Database model msg -> model -> Cmd msg
-get key database model =
+get : String -> String -> Database model msg -> model -> Cmd msg
+get userId key database model =
   case database of
     Simulated simDb ->
       simulatedGet key simDb model
     Dynamo dynamoDb ->
-      dynamoGet key dynamoDb model
+      dynamoGet userId key dynamoDb model
 
 scan : Database model msg -> model -> Cmd msg
 scan database model =
@@ -426,6 +436,8 @@ update properties database model =
             updateGet properties database model
           "put" ->
             updatePut properties database model
+          "delete" ->
+            updatePut (setProp "value" "" properties) database model
           "scan" ->
             updateScan properties database model
           "logout" ->
@@ -511,16 +523,10 @@ updatePut properties database model =
 
 updateScan : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateScan properties database model =
-  case getProp "keys" properties of
-    Nothing ->
-      Err <| otherError "Missing value in get return."
-    Just keystr ->
-      let dispatcher = getDispatcher database
-          keys = case keystr of
-                   "" -> []
-                   _ -> String.split "\\" keystr
-      in
-        Ok <| dispatcher.scan keys database model
+  let keys = List.map snd (List.filter (\prop -> (fst prop) == "") properties)
+      dispatcher = getDispatcher database
+  in
+    Ok <| dispatcher.scan keys database model
 
 updateLogout : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateLogout properties database model =
