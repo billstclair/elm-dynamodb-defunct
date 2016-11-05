@@ -267,6 +267,14 @@ loginButton model =
   else
     button [ onClick Login ] [ text "Login" ]    
     
+errorDiv : Model -> Html Msg
+errorDiv model =
+  div [ style [("color", "red")] ]
+    [ text <| case model.error of
+                "" -> nbsp
+                err -> err
+    ]
+    
 sharedView : String -> Model -> Html Msg
 sharedView subheader model =
   div [ style [ ("width", "40em")
@@ -283,7 +291,8 @@ sharedView subheader model =
     ,case model.profile of
         Nothing ->
           div []
-              [ loginButton model ]
+              [ loginButton model
+              , errorDiv model]
         Just profile ->
           div []
               [
@@ -308,11 +317,7 @@ sharedView subheader model =
                 , button [ onClick Put ] [ text "Put" ]
                 , text " "
                 , button [ onClick Get ] [ text "Get" ]
-                , div [ style [("color", "red")] ]
-                    [ text <| case model.error of
-                                "" -> nbsp
-                                err -> err
-                    ]
+                , errorDiv model
                 ]
               , table [ borderStyle ]
                 ((tr [] [ th [ borderStyle
