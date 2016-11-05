@@ -38,7 +38,7 @@ database =
   DB.makeSimulatedDb
       profile getDbDict setDbDict backendCmd dispatcher
 
-init : (Model, Cmd msg)
+init : (Model, Cmd Msg)
 init =
   sharedInit database
 

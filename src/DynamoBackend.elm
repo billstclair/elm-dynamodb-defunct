@@ -25,6 +25,10 @@ import Result exposing (Result(..))
 import List
 import List.Extra as LE
 import Random
+import Time
+import Http
+import Json.Decode as JD
+import Task
 
 import Debug exposing (log)
 
@@ -65,6 +69,12 @@ setProp : String -> String -> Properties -> Properties
 setProp key value properties =
   (key, value) :: (List.filter (\(k, _) -> k /= key) properties)
 
+mergeProps : Properties -> Properties -> Properties
+mergeProps from to =
+  List.foldr
+    (\pair props -> setProp (fst pair) (snd pair) props)
+    to from
+
 type alias DynamoServerInfo =
   { clientId : String
   , tableName : String
@@ -98,12 +108,15 @@ type Database model msg
   = Simulated (SimDb model msg)
   | Dynamo (DynamoDb model msg)
 
-makeDynamoDb serverInfo getProperties setProperties backendPort backendMsg dispatcher =
-  Dynamo <| DynamoDb serverInfo getProperties setProperties backendPort backendMsg dispatcher
+makeDynamoDb
+  serverInfo getProperties setProperties backendPort backendMsg dispatcher =
+    Dynamo <|
+      DynamoDb
+        serverInfo getProperties setProperties backendPort backendMsg dispatcher
 
 makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
-  Simulated
-    (SimDb profile getDict setDict simulatedPort dispatcher)
+  Simulated <|
+    SimDb profile getDict setDict simulatedPort dispatcher
 
 isRealDatabase : Database model msg -> Bool
 isRealDatabase database =
@@ -126,7 +139,7 @@ simulatedLogin database model =
       [ ("operation", "login")
       , ("email", profile.email)
       , ("name", profile.name)
-      , ("userId", profile.userId)
+      , ("user_id", profile.userId)
       ]
       
 simulatedPut : String -> String -> SimDb model msg -> model -> (model, Cmd msg)
@@ -212,12 +225,100 @@ dynamoLogin : DynamoDb model msg -> model -> Cmd msg
 dynamoLogin database model =
   genRandom "login-with-state" database
 
-dynamoLoginWithState : String -> DynamoDb model msg -> model -> Cmd msg
+dynamoLoginWithState : String -> DynamoDb model msg -> model -> (model, Cmd msg)
 dynamoLoginWithState state database model =
-  database.backendPort
-    [ ("operation", "login")
-    , ("state", log "login state" state)
-    ]
+  let properties = database.getProperties model
+      model' = database.setProperties
+                 (setProp "expectedState" state properties) model
+  in
+    ( model'
+    , database.backendPort
+        [ ("operation", "login")
+        , ("state", state)
+        ]
+    )
+
+makeMsgCmd : msg -> Cmd msg
+makeMsgCmd msg =
+  Task.perform identity identity (Task.succeed msg)
+
+{-
+$c = curl_init('https://api.amazon.com/user/profile');
+curl_setopt($c, CURLOPT_HTTPHEADER, array('Authorization: bearer ' . $_REQUEST['access_token']));
+curl_setopt($c, CURLOPT_RETURNTRANSFER, true);
+-}
+defaultSettings : Http.Settings
+defaultSettings =
+  let settings = Http.defaultSettings
+  in
+      { settings | timeout = Time.minute }
+
+fetchProfileError : DynamoDb model msg -> Http.Error -> msg
+fetchProfileError database error =
+  let msg = case error of
+              Http.Timeout -> "timeout"
+              Http.NetworkError -> "network error"
+              Http.UnexpectedPayload json ->
+                "Unexpected Payload: " ++ json
+              Http.BadResponse code err ->
+                "Bad Response: " ++ (toString code) ++ err
+  in
+    database.backendMsg
+      [("error" , "Profile fetch error: " ++ msg)]
+  
+profileReceived : DynamoDb model msg -> Properties -> msg
+profileReceived database properties =
+  database.backendMsg
+    <| setProp "operation" "login" properties
+
+getAmazonUserProfile : String -> DynamoDb model msg -> Cmd msg
+getAmazonUserProfile accessToken database =
+  let task = Http.send
+               defaultSettings
+               { verb = "get"
+               , headers = [("authorization", "bearer " ++ accessToken)]
+               , url = "https://api.amazon.com/user/profile"
+               , body = Http.empty
+               }
+      decoded = Http.fromJson (JD.keyValuePairs JD.string) task
+  in
+      Task.perform
+        (fetchProfileError database) (profileReceived database) decoded
+
+-- Got an access token from the login code
+-- Need to look up the Profile
+dynamoAccessToken : Properties -> DynamoDb model msg -> model -> (model, Cmd msg)
+dynamoAccessToken properties database model =
+  let modelProps = database.getProperties model
+      err = case getProp "expectedState" modelProps of
+              Nothing -> ""
+              Just expected ->
+                case getProp "state" properties of
+                  Nothing -> "No state returned from login"
+                  Just state ->
+                    if state == expected then
+                      ""
+                    else
+                      "Cross-site Request Forgery attempt."
+  in
+    if err /= "" then
+      ( model
+      , makeMsgCmd
+          <| database.backendMsg [("error", err)]
+      )
+    else
+      case getProp "access_token" properties of
+        Nothing ->
+          ( model
+          , makeMsgCmd
+              <| database.backendMsg
+                   [("error", "No access token returned from login.")]
+          )
+        Just accessToken ->
+            (database.setProperties
+               (mergeProps properties modelProps) model
+            , getAmazonUserProfile accessToken database
+            )
 
 dynamoPut : String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
 dynamoPut key value database model =
@@ -344,11 +445,14 @@ updateLoginWithState properties database model =
                     Nothing -> "foo"
                     Just s -> s
       in
-        Ok (model, dynamoLoginWithState state dynDb model)
+        Ok <| dynamoLoginWithState state dynDb model
 
 updateAccessToken : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateAccessToken properties database model =
-  Ok (model, Cmd.none)
+  case database of
+    Simulated _ -> Ok (model, Cmd.none)
+    Dynamo dynDb ->
+      Ok <| dynamoAccessToken properties dynDb model
 
 updateLogin : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateLogin properties database model =
@@ -360,7 +464,7 @@ updateLogin properties database model =
         Nothing ->
           Err <| otherError "Missing name in login return."
         Just name ->
-          case getProp "userId" properties of
+          case getProp "user_id" properties of
             Nothing ->
               Err <| otherError "Missing userId in login return."
             Just userId ->
