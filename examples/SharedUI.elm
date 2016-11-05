@@ -20,7 +20,8 @@ import DynamoBackend as DB
 import Html exposing ( Html, Attribute
                      , div, h1, h2, text, input, button, a, img, p
                      , table, tr, td, th)
-import Html.Attributes exposing ( href, id, alt, src, width, height, style, value)
+import Html.Attributes exposing ( href, id, alt, src, width, height
+                                , style, class, value)
 import Html.Events exposing (onClick, onInput, on, keyCode)
 import Html.App as App
 import String
@@ -66,11 +67,9 @@ type DbType
 
 loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
 loginReceiver profile database model =
-  let model' = { model |
-                   profile = Just profile
-               }
-  in
-    ( model' , DB.scan database model' )
+  ( { model | profile = Just profile }
+  , DB.scan database model
+  )
 
 insertInKeys : String -> List String -> List String
 insertInKeys key keys =
@@ -277,6 +276,13 @@ errorDiv model =
                 err -> err
     ]
     
+tableAttributes : Model -> List (Attribute Msg)
+tableAttributes model =
+  if DB.isRealDatabase <| mdb model then
+    [ ]
+  else
+    [ borderStyle ]
+
 sharedView : String -> Model -> Html Msg
 sharedView subheader model =
   div [ style [ ("width", "40em")
@@ -321,7 +327,7 @@ sharedView subheader model =
                 , button [ onClick Get ] [ text "Get" ]
                 , errorDiv model
                 ]
-              , table [ borderStyle ]
+              , table (tableAttributes model)
                 ((tr [] [ th [ borderStyle
                              , style [("width", "10em")]
                              ]

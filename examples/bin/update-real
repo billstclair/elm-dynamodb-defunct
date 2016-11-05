@@ -4,6 +4,7 @@ elm make real.elm --output ../site/Main.js
 cp -P dynamo-backend.js ../site/
 cp -P dynamo-server-info.js ../site/
 cp -P dynamo-example.html ../site/
+cp -P tables.css ../site/
 cd ../site
 rsyncit
 

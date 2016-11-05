@@ -1,0 +1,22 @@
+table {
+  margin: 0em 0.5em 0.5em 0.5em;
+  background: whitesmoke;
+  border-collapse: collapse;
+}
+th, td {
+  border: 1px silver solid;
+  padding: 0.2em;
+}
+th {
+  background: gainsboro;
+  text-align: center;
+}
+table caption {
+  margin-left: inherit;
+  margin-right: inherit;
+}
+
+tr:nth-child(even) td { background: #F1F1F1; }
+tr:nth-child(odd) td { background: #FEFEFE; }
+
+tr td:hover { background: #666; color: #FFF; }

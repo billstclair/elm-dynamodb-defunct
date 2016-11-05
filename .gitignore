@@ -2,3 +2,4 @@ elm-stuff/
 *.js
 simulated.html
 site/dynamo-example.html
+site/*.css
