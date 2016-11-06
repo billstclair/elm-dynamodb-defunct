@@ -21,12 +21,6 @@ dynamoBackend.dispatch = dispatch;
 dynamoBackend.getLoginCompleteResponse = getLoginCompleteResponse;
 dynamoBackend.getDynamoDb = getDynamoDb;
 
-dynamoBackend.login = login;
-dynamoBackend.updateItem = updateItem;
-dynamoBackend.getItem = getItem;
-dynamoBackend.deleteItem = deleteItem;
-dynamoBackend.scanKeys = scanKeys;
-
 // Expects the top-level HTML file that loads this to first load
 // dynamo-server-info.js, to define dynamoServerInfo for your app.
 var clientId = dynamoServerInfo.clientId;
@@ -194,7 +188,7 @@ function scanKeys(fetchValues, user, callback) {
   var params = {
     TableName: tableName,
     AttributesToGet: (
-      fetchValues ? [ 'appkey' ] : [ 'appkey', 'value' ]
+      fetchValues ? [ 'appkey', 'value' ] : [ 'appkey' ]
     ),
     KeyConditions: {
       user: {
@@ -344,14 +338,20 @@ function dispatch(properties, port) {
           var items = data.Items;
           for (var idx in items) {
             var item = items[idx];
-            var value = item.appkey.S;
-            if (value) {
-              res.push(["", stripAppkey(value)])
+            var appkey = item.appkey
+            if (appkey) {
+              var value = appkey.S;
+              if (value) {
+                res.push(["", stripAppkey(value)])
+              }
             }
             if (fetchValues) {
-              value = item.value.S;
+              value = item.value;
               if (value) {
-                res.push (["_", value]);
+                var s = value.S;
+                if (s) {
+                  res.push (["_", s]);
+                }
               }
             }
           }

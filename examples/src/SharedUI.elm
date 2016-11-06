@@ -109,7 +109,7 @@ scanReceiver : List String -> List String -> Database -> Model -> (Model, Cmd Ms
 scanReceiver keys values database model =
   ( { model |
       keys = keys
-    , valueDict = Dict.empty
+    , valueDict = Dict.fromList <| List.map2 (,) keys values
     }
   , Cmd.none
   )
@@ -170,6 +170,7 @@ type Msg
   | Logout
   | Get
   | Put
+  | Refresh
   | SetKey String
   | BackendMsg DB.Properties
   | Nop
@@ -217,6 +218,11 @@ update msg model =
             "" -> (model, Cmd.none)
             key ->
               DB.put profile.userId key model.value (mdb model) model
+    Refresh ->
+      case model.profile of
+        Nothing -> (model, Cmd.none)
+        Just profile ->
+          (model, DB.scan True profile.userId (mdb model) model)
     SetKey key ->
       ( { model | key = key }
       , makeMsgCmd Get
@@ -330,6 +336,8 @@ sharedView subheader model =
                 , button [ onClick Put ] [ text "Put" ]
                 , text " "
                 , button [ onClick Get ] [ text "Get" ]
+                , text " "
+                , button [ onClick Refresh ] [ text "Refresh" ]
                 , errorDiv model
                 ]
               , table (tableAttributes model)
