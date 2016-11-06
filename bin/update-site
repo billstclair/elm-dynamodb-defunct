@@ -1,9 +1,0 @@
-#!/bin/bash
-
-# Build the site, and upload it.
-
-DIR="$( dirname "${BASH_SOURCE[0]}" )"
-
-$DIR/build-site
-cd $DIR/../site
-../$DIR/rsyncit

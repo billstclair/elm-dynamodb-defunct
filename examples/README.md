@@ -11,9 +11,11 @@ elm reactor
 
 Then aim your browser at http://localhost:8000/src/simulated.elm.
 
-`simulated.elm` is also live at [kakuro-dojo.com/simulated.html](https://kakuro-dojo.com/simulated.html).
+[src/simulated.elm](src/simulated.elm) is also live at [kakuro-dojo.com/simulated.html](https://kakuro-dojo.com/simulated.html).
 
-The real backend, using a table in my Amazon AWS account, is live at [kakuro-dojo.com/dynamo-example.html](https://kakuro-dojo.com/dynamo-example.html).
+[src/real.elm](src/real.elm) is an example using the real DynamoDB backend. It will NOT run in `elm-reactor`. It is live, using a table in my Amazon AWS account, at [kakuro-dojo.com/dynamo-example.html](https://kakuro-dojo.com/dynamo-example.html).
+
+Both are thin wrappers around the code in [src/SharedUI.elm](src/SharedUI.elm).
 
 I'll write documentation soon about how to set up your own DynamoDB table and to configure your application to use the ports to [js/dynamo-backend.js](js/dynamo-backend.js).
 
@@ -35,3 +37,5 @@ The table with "Key" and "Value" headings shows the known keys. Initially, it wo
 
 The key/value pairs entered in the real backend example are persistent until you stop paying Amazon, or remove them. For the simulated database, they last for only one session. They do, however, survive "Logout" followed by "Login".
 
+Bill St. Clair &lt;billstclair@gmail.com&gt;<br/>
+6 November 2016

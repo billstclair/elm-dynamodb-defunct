@@ -1,11 +1,10 @@
 #!/bin/bash
 
-elm make src/real.elm --output ../site/Main.js
-cp -P js/dynamo-backend.js ../site/
-cp -P js/dynamo-server-info.js ../site/
-cp -P dynamo-example.html ../site/
-cp -P tables.css ../site/
-cd ../site
+elm make src/real.elm --output site/js/Main.js
+cp -P js/dynamo-backend.js site/js/
+cp -P js/dynamo-server-info.js site/js/
+cp -P dynamo-example.html site/
+cd site
 rsyncit
 
 
