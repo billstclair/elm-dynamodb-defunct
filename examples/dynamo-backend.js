@@ -187,15 +187,15 @@ function deleteItem(user, key, callback) {
   dynamodb.deleteItem(params, callback);
 }
 
-function scanKeys(user, callback) {
+function scanKeys(fetchValues, user, callback) {
   if (callback === undefined) {
     callback = debugCallback;
   }
   var params = {
     TableName: tableName,
-    AttributesToGet: [
-      'appkey'
-      ],
+    AttributesToGet: (
+      fetchValues ? [ 'appkey' ] : [ 'appkey', 'value' ]
+    ),
     KeyConditions: {
       user: {
         ComparisonOperator: 'EQ',
@@ -331,9 +331,11 @@ function dispatch(properties, port) {
       });
       break;
     case "scan":
-      // Properties expected: user
+      // Properties expected: fetchValues, user
       // Properties sent: ["", key] for each key
-      scanKeys(props.user, function (err, data) {
+      //                  ["_", value] for each value if fetchValues is "true"
+      var fetchValues = (props.fetchValues == "true");
+      scanKeys(fetchValues, props.user, function (err, data) {
         var res;
         if (err) {
           res = errorProperties("scan", err);
@@ -345,6 +347,12 @@ function dispatch(properties, port) {
             var value = item.appkey.S;
             if (value) {
               res.push(["", stripAppkey(value)])
+            }
+            if (fetchValues) {
+              value = item.value.S;
+              if (value) {
+                res.push (["_", value]);
+              }
             }
           }
         }

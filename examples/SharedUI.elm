@@ -67,7 +67,7 @@ type DbType
 loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
 loginReceiver profile database model =
   ( { model | profile = Just profile }
-  , DB.scan profile.userId database model
+  , DB.scan False profile.userId database model
   )
 
 insertInKeys : String -> List String -> List String
@@ -105,8 +105,8 @@ putReceiver key value database model =
   , Cmd.none
   )
 
-scanReceiver : List String -> Database -> Model -> (Model, Cmd Msg)
-scanReceiver keys database model =
+scanReceiver : List String -> List String -> Database -> Model -> (Model, Cmd Msg)
+scanReceiver keys values database model =
   ( { model |
       keys = keys
     , valueDict = Dict.empty

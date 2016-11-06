@@ -52,7 +52,7 @@ type alias ResultDispatcher model msg =
   { login : (Profile -> Database model msg -> model -> (model, Cmd msg))
   , get : (String -> String -> Database model msg -> model -> (model, Cmd msg))
   , put : (String -> String -> Database model msg -> model -> (model, Cmd msg))
-  , scan : (List String -> Database model msg -> model -> (model, Cmd msg))
+  , scan : (List String -> List String -> Database model msg -> model -> (model, Cmd msg))
   , logout : (Database model msg -> model -> (model, Cmd msg))
   }
 
@@ -182,13 +182,18 @@ simulatedGet key database model =
       , ("value", value)
       ]
 
-simulatedScan : SimDb model msg -> model -> Cmd msg
-simulatedScan database model =
+simulatedScan : Bool -> SimDb model msg -> model -> Cmd msg
+simulatedScan fetchValues database model =
   let dict = database.getDict model
       keys = List.map (\key -> ("", key)) (Dict.keys dict)
+      values = if fetchValues then
+                 List.map (\key -> ("_", key)) (Dict.values dict)
+               else
+                 []
   in
     database.simulatedPort
-      <| setProp "operation" "scan" keys
+      <| setProp "operation" "scan"
+      <| List.append keys values
 
 simulatedLogout : SimDb model msg -> model -> Cmd msg
 simulatedLogout database model =
@@ -337,11 +342,12 @@ dynamoGet userId key database model =
     , ("key", key)
     ]
 
-dynamoScan : String -> DynamoDb model msg -> model -> Cmd msg
-dynamoScan userid database model =
+dynamoScan : Bool -> String -> DynamoDb model msg -> model -> Cmd msg
+dynamoScan fetchValues userid database model =
   database.backendPort
     [ ("operation", "scan")
     , ("user", userid)
+    , ("fetchValues", if fetchValues then "true" else "false")
     ]
 
 dynamoLogout : DynamoDb model msg -> model -> Cmd msg
@@ -389,13 +395,13 @@ get userId key database model =
     Dynamo dynamoDb ->
       dynamoGet userId key dynamoDb model
 
-scan : String -> Database model msg -> model -> Cmd msg
-scan userid database model =
+scan : Bool -> String -> Database model msg -> model -> Cmd msg
+scan fetchValues userid database model =
   case database of
     Simulated simDb ->
-      simulatedScan simDb model
+      simulatedScan fetchValues simDb model
     Dynamo dynamoDb ->
-      dynamoScan userid dynamoDb model
+      dynamoScan fetchValues userid dynamoDb model
 
 logout : Database model msg -> model -> Cmd msg
 logout database model =
@@ -526,9 +532,10 @@ updatePut properties database model =
 updateScan : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateScan properties database model =
   let keys = List.map snd (List.filter (\prop -> (fst prop) == "") properties)
+      values = List.map snd (List.filter (\prop -> (fst prop) == "_") properties)
       dispatcher = getDispatcher database
   in
-    Ok <| dispatcher.scan keys database model
+    Ok <| dispatcher.scan keys values database model
 
 updateLogout : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateLogout properties database model =
