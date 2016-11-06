@@ -67,7 +67,7 @@ type DbType
 loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
 loginReceiver profile database model =
   ( { model | profile = Just profile }
-  , DB.scan database model
+  , DB.scan profile.userId database model
   )
 
 insertInKeys : String -> List String -> List String

@@ -337,10 +337,12 @@ dynamoGet userId key database model =
     , ("key", key)
     ]
 
-dynamoScan : DynamoDb model msg -> model -> Cmd msg
-dynamoScan database model =
+dynamoScan : String -> DynamoDb model msg -> model -> Cmd msg
+dynamoScan userid database model =
   database.backendPort
-    [ ("operation", "scan") ]
+    [ ("operation", "scan")
+    , ("user", userid)
+    ]
 
 dynamoLogout : DynamoDb model msg -> model -> Cmd msg
 dynamoLogout database model =
@@ -387,13 +389,13 @@ get userId key database model =
     Dynamo dynamoDb ->
       dynamoGet userId key dynamoDb model
 
-scan : Database model msg -> model -> Cmd msg
-scan database model =
+scan : String -> Database model msg -> model -> Cmd msg
+scan userid database model =
   case database of
     Simulated simDb ->
       simulatedScan simDb model
     Dynamo dynamoDb ->
-      dynamoScan dynamoDb model
+      dynamoScan userid dynamoDb model
 
 logout : Database model msg -> model -> Cmd msg
 logout database model =

@@ -187,7 +187,7 @@ function deleteItem(user, key, callback) {
   dynamodb.deleteItem(params, callback);
 }
 
-function scanKeys(callback) {
+function scanKeys(user, callback) {
   if (callback === undefined) {
     callback = debugCallback;
   }
@@ -196,7 +196,15 @@ function scanKeys(callback) {
     AttributesToGet: [
       'appkey'
       ],
-    ScanFilter: {
+    KeyConditions: {
+      user: {
+        ComparisonOperator: 'EQ',
+        AttributeValueList: [
+          {
+            S: user
+          }
+        ]
+      },
       appkey: {
         ComparisonOperator: 'BEGINS_WITH',
         AttributeValueList: [
@@ -206,8 +214,8 @@ function scanKeys(callback) {
         ]
       }
     }
-  }
-  dynamodb.scan(params, callback);
+  };
+  dynamodb.query(params, callback);
 }
 
 // Roles created here:
@@ -291,10 +299,17 @@ function dispatch(properties, port) {
         if (err) {
           res = errorProperties("get", err);
         } else {
-          var value = data.Item.value.S;
+          var item = data.Item;
+          var s = null;
+          if (item) {
+            var value = item.value;
+            if (value) {
+              s = value.S;
+            }
+          }
           res = properties;
-          if (value) {
-            res.push(["value", value]);
+          if (s) {
+            res.push(["value", s]);
           } else {
             res.push(["error", "Missing value"]);
           }
@@ -316,9 +331,9 @@ function dispatch(properties, port) {
       });
       break;
     case "scan":
-      // Properties expected: none
+      // Properties expected: user
       // Properties sent: ["", key] for each key
-      scanKeys(function (err, data) {
+      scanKeys(props.user, function (err, data) {
         var res;
         if (err) {
           res = errorProperties("scan", err);
