@@ -1,6 +1,6 @@
 #!/bin/bash
 
-elm make simulated.elm --output ../site/simulated.html
+elm make src/simulated.elm --output ../site/simulated.html
 cd ../site
 ../bin/rsyncit simulated.html
 

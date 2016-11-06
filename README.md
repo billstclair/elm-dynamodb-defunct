@@ -2,17 +2,17 @@
 
 Elm Interface to [Amazon DynamoDB](https://aws.amazon.com/dynamodb/).
 
-To compile `src/dynamodb.elm` into `site/dynamodb.js`, required by `site/login.html`:
+You can run your code against a pure Elm simulator during development, and then change the initial value of the "database" parameter to switch to the real Amazon backend.
 
-```
-.bin/build-site
-```
+[examples/simulated.elm](examples/simulated.elm) is an example application that uses the simulator. It works in `elm-reactor`.
 
-Then aim your browser at `site/login.html`.
+[examples/real.elm](examples/real.elm) is an example application that uses the real backend. It is live at [kakuro-dojo.com/dynamo-example.html](https://kakuro-dojo.com/dynamo-example.html).
 
-Live at https://kakuro-dojo.com/login.html
+Both are tiny wrappers around [examples/SharedUI.elm](examples/SharedUI.elm).
 
-See the [`examples`](examples/) directory for examples of use, instructions for setting up the ports necessary to communicate with Amazon's servers, and instructions for how to create your DynamoDB backend table and to give your Elm apps permission to use it.
+The library itself is in [src/DynamoBackend.elm](src/DynamoBackend.elm).
+
+It takes a little configuration to make the real backend ports work on your own site with your own DynamoDB table. I haven't documented that yet.
 
 Bill St. Clair &lt;billstclair@gmail.com&gt;<br/>
-3 November 2016
+6 November 2016

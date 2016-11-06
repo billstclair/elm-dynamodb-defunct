@@ -1,8 +1,8 @@
 #!/bin/bash
 
-elm make real.elm --output ../site/Main.js
-cp -P dynamo-backend.js ../site/
-cp -P dynamo-server-info.js ../site/
+elm make src/real.elm --output ../site/Main.js
+cp -P js/dynamo-backend.js ../site/
+cp -P js/dynamo-server-info.js ../site/
 cp -P dynamo-example.html ../site/
 cp -P tables.css ../site/
 cd ../site

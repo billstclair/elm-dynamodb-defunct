@@ -1,4 +1,4 @@
 #!/bin/bash
 
-elm make $1.elm --output /dev/null
+elm make src/$1.elm --output /dev/null
 

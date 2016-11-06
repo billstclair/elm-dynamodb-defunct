@@ -2,22 +2,24 @@
 
 This directory contains examples of using the `DynamoBackend` module.
 
-I'm still working on the real backend. It's prototyped in `src/dynamodb.elm` and `site/login.html`.
-
-The simulated backend is fully functional. To run it:
+The simulated backend is pure Elm. To run it:
 
 ```
 cd .../elm-dynamodb/examples
 elm reactor
 ```
 
-Then aim your browser at http://localhost:8000/simulated.elm.
+Then aim your browser at http://localhost:8000/src/simulated.elm.
 
 `simulated.elm` is also live at [kakuro-dojo.com/simulated.html](https://kakuro-dojo.com/simulated.html).
 
+The real backend, using a table in my Amazon AWS account, is live at [kakuro-dojo.com/dynamo-example.html](https://kakuro-dojo.com/dynamo-example.html).
+
+I'll write documentation soon about how to set up your own DynamoDB table and to configure your application to use the ports to [js/dynamo-backend.js](js/dynamo-backend.js).
+
 ## <a name="use">How to use the interface</a>
 
-The real and simulated backend examples share most of their code, with the only differences being the `h2` header and the database, real or simulated.
+The real and simulated backend examples share most of their code, with the only differences being the `h2` header, the login button appearance, and the database, real or simulated.
 
 First, click the "Login" button. This will just login with simulated credentials in the simulated example. It will pop up an Amazon login window in the real example, and you'll need to log in to your Amazon account.
 
