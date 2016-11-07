@@ -77,31 +77,34 @@ insertInKeys key keys =
   else
     keys
 
-getReceiver : String -> String -> Database -> Model -> (Model, Cmd Msg)
-getReceiver key value database model =
-  ( if value == "" then
-      { model | value = value }
-      else
-        { model |
-          value = value
-        , keys = insertInKeys key model.keys
-        , valueDict = Dict.insert key value model.valueDict
-        }
+getReceiver : String -> Maybe String -> Database -> Model -> (Model, Cmd Msg)
+getReceiver key maybeValue database model =
+    
+  ( case maybeValue of
+        Nothing ->
+            { model | value = "" }
+        Just value ->
+            { model |
+              value = value
+            , keys = insertInKeys key model.keys
+            , valueDict = Dict.insert key value model.valueDict
+            }
   , Cmd.none
   )
 
-putReceiver : String -> String -> Database -> Model -> (Model, Cmd Msg)
-putReceiver key value database model =
-  ( if value == "" then
-      { model |
-        keys = LE.remove key model.keys
-      , valueDict = Dict.remove key model.valueDict
-      }
-    else
-      { model |
-        keys = insertInKeys key model.keys
-      , valueDict = Dict.insert key value model.valueDict
-      }
+putReceiver : String -> Maybe String -> Database -> Model -> (Model, Cmd Msg)
+putReceiver key maybeValue database model =
+  ( case maybeValue of
+      Nothing ->
+        { model |
+          keys = LE.remove key model.keys
+        , valueDict = Dict.remove key model.valueDict
+        }
+      Just value ->  
+        { model |
+          keys = insertInKeys key model.keys
+        , valueDict = Dict.insert key value model.valueDict
+        }
   , Cmd.none
   )
 
@@ -217,7 +220,12 @@ update msg model =
           case model.key of
             "" -> (model, Cmd.none)
             key ->
-              DB.put profile.userId key model.value (mdb model) model
+              let value = model.value
+              in
+                  if value == "" then
+                    DB.remove profile.userId key (mdb model) model
+                  else
+                    DB.put profile.userId key value (mdb model) model
     Refresh ->
       case model.profile of
         Nothing -> (model, Cmd.none)

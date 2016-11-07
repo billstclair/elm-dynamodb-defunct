@@ -15,7 +15,8 @@ module DynamoBackend exposing ( Profile, Properties, StringDict
                               , getProp
                               , DynamoServerInfo , makeDynamoDb, isRealDatabase
                               , makeSimulatedDb
-                              , installLoginScript, login, put, get, scan, logout
+                              , installLoginScript, login
+                              , put, remove, get, scan, logout
                               , update
                               )
 
@@ -50,8 +51,8 @@ type alias Error =
 
 type alias ResultDispatcher model msg =
   { login : (Profile -> Database model msg -> model -> (model, Cmd msg))
-  , get : (String -> String -> Database model msg -> model -> (model, Cmd msg))
-  , put : (String -> String -> Database model msg -> model -> (model, Cmd msg))
+  , get : (String -> Maybe String -> Database model msg -> model -> (model, Cmd msg))
+  , put : (String -> Maybe String -> Database model msg -> model -> (model, Cmd msg))
   , scan : (List String -> List String -> Database model msg -> model -> (model, Cmd msg))
   , logout : (Database model msg -> model -> (model, Cmd msg))
   }
@@ -68,6 +69,10 @@ getProp key properties =
 setProp : String -> String -> Properties -> Properties
 setProp key value properties =
   (key, value) :: (List.filter (\(k, _) -> k /= key) properties)
+
+removeProp : String -> Properties -> Properties
+removeProp key properties =
+  List.filter (\(k, _) -> k /= key) properties
 
 mergeProps : Properties -> Properties -> Properties
 mergeProps from to =
@@ -154,12 +159,7 @@ simulatedPut key value database model =
   else
     let dict = database.getDict model
         model' =
-          database.setDict
-            (if value == "" then
-               Dict.remove key dict
-             else
-               Dict.insert key value dict)
-              model
+          database.setDict (Dict.insert key value dict) model
     in
       ( model'
       , database.simulatedPort
@@ -169,18 +169,33 @@ simulatedPut key value database model =
           ]
       )
 
+simulatedRemove : String -> SimDb model msg -> model -> (model, Cmd msg)
+simulatedRemove key database model =
+    let dict = database.getDict model
+        model' = database.setDict (Dict.remove key dict) model
+    in
+      ( model'
+      , database.simulatedPort
+          [ ("operation", "remove")
+          , ("key", key)
+          ]
+      )
+
 simulatedGet : String -> SimDb model msg -> model -> Cmd msg
 simulatedGet key database model =
   let dict = database.getDict model
-      value = case Dict.get key dict of
-                Nothing -> ""
-                Just v -> v
+      res = case Dict.get key dict of
+                Nothing ->
+                    [ ("operation", "get")
+                    , ("key", key)
+                    ]
+                Just value ->
+                    [ ("operation", "get")
+                    , ("key", key)
+                    , ("value", value)
+                    ]
   in
-    database.simulatedPort
-      [ ("operation", "get")
-      , ("key", key)
-      , ("value", value)
-      ]
+    database.simulatedPort res
 
 simulatedScan : Bool -> SimDb model msg -> model -> Cmd msg
 simulatedScan fetchValues database model =
@@ -327,10 +342,20 @@ dynamoPut : String -> String -> String -> DynamoDb model msg -> model -> (model,
 dynamoPut userId key value database model =
   ( model
   , database.backendPort
-      [ ("operation", if value == "" then "delete" else "put")
+      [ ("operation", "put")
       , ("user", userId)
       , ("key", key)
       , ("value", value)
+      ]
+  )
+
+dynamoRemove : String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)
+dynamoRemove userId key database model =
+  ( model
+  , database.backendPort
+      [ ("operation", "remove")
+      , ("user", userId)
+      , ("key", key)
       ]
   )
 
@@ -386,6 +411,14 @@ put userId key value database model =
       simulatedPut key value simDb model
     Dynamo dynamoDb ->
       dynamoPut userId key value dynamoDb model
+
+remove : String -> String -> Database model msg -> model -> (model, Cmd msg)
+remove userId key database model =
+  case database of
+    Simulated simDb ->
+      simulatedRemove key simDb model
+    Dynamo dynamoDb ->
+      dynamoRemove userId key dynamoDb model
 
 get : String -> String -> Database model msg -> model -> Cmd msg
 get userId key database model =
@@ -444,8 +477,8 @@ update properties database model =
             updateGet properties database model
           "put" ->
             updatePut properties database model
-          "delete" ->
-            updatePut (setProp "value" "" properties) database model
+          "remove" ->
+            updatePut (removeProp "value" properties) database model
           "scan" ->
             updateScan properties database model
           "logout" ->
@@ -507,13 +540,10 @@ updateGet properties database model =
     Nothing ->
       Err <| otherError "Missing key in get return."
     Just key ->
-      case getProp "value" properties of
-        Nothing ->
-          Err <| otherError "Missing value in get return."
-        Just value ->
-          let dispatcher = getDispatcher database
-          in
-            Ok <| dispatcher.get key value database model
+      let value = getProp "value" properties
+          dispatcher = getDispatcher database
+      in
+          Ok <| dispatcher.get key value database model
 
 updatePut : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updatePut properties database model =
@@ -521,13 +551,10 @@ updatePut properties database model =
     Nothing ->
       Err <| otherError "Missing key in put return."
     Just key ->
-      case getProp "value" properties of
-        Nothing ->
-          Err <| otherError "Missing value in put return."
-        Just value ->
-          let dispatcher = getDispatcher database
-          in
-            Ok <| dispatcher.put key value database model
+      let dispatcher = getDispatcher database
+          maybeValue = getProp "value" properties
+      in
+          Ok <| dispatcher.put key maybeValue database model
 
 updateScan : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 updateScan properties database model =

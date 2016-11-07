@@ -304,20 +304,18 @@ function dispatch(properties, port) {
           res = properties;
           if (s) {
             res.push(["value", s]);
-          } else {
-            res.push(["error", "Missing value"]);
           }
         }
         port.send(res);
       });
       break;
-    case "delete":
+    case "remove":
       // Properties expected: user, key
       // Properties sent: user, key
       deleteItem(props.user, props.key, function(err, data) {
         var res;
         if (err) {
-          res = errorProperties("delete", err);
+          res = errorProperties("remove", err);
         } else {
           res = properties;
         }
