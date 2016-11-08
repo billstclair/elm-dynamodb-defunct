@@ -29,6 +29,7 @@ import Random
 import Time
 import Http
 import Json.Decode as JD
+import Json.Encode as JE
 import Task
 
 import Debug exposing (log)
@@ -303,6 +304,26 @@ getAmazonUserProfile accessToken database =
       Task.perform
         (fetchProfileError database) (profileReceived database) decoded
 
+jePair : (String, String) -> JE.Value
+jePair pair =
+  let (name, value) = pair
+  in
+    JE.list [(JE.string name), (JE.string value)]
+
+jeProperties : Properties -> JE.Value
+jeProperties properties =
+  JE.list <| List.map jePair properties
+
+localSaveAccessToken : Properties -> DynamoDb model msg -> Cmd msg
+localSaveAccessToken properties database =
+  let json = JE.encode 0 <| jeProperties properties
+      props = [ ("operation", "localPut")
+              , ("key", "accessToken")
+              , ("value", json)
+              ]
+  in
+    database.backendPort props
+
 -- Got an access token from the login code
 -- Need to look up the Profile
 dynamoAccessToken : Properties -> DynamoDb model msg -> model -> (model, Cmd msg)
@@ -335,7 +356,9 @@ dynamoAccessToken properties database model =
         Just accessToken ->
             (database.setProperties
                (mergeProps properties modelProps) model
-            , getAmazonUserProfile accessToken database
+            , Cmd.batch [ localSaveAccessToken properties database
+                        , getAmazonUserProfile accessToken database
+                        ]
             )
 
 dynamoPut : String -> String -> String -> DynamoDb model msg -> model -> (model, Cmd msg)

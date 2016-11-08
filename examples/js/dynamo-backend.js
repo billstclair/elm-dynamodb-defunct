@@ -287,7 +287,8 @@ function dispatch(properties, port) {
       break;
     case "get":
       // Properties expected: user, key
-      // Properties sent: user, key
+      // Properties sent: user, key, value
+      // If value is missing, it means that key wasn't in table.
       getItem(props.user, props.key, function(err, data) {
         var res;
         if (err) {
@@ -356,6 +357,29 @@ function dispatch(properties, port) {
         }
         port.send(res);
       });
+      break;
+    case "localGet":
+      // Properties expected: key
+      // Properties sent: key, value
+      // If there is no value for key, do NOT send back "value" property.
+      var value = localStorage.getItem(appkey(props.key));
+      var res = properties;
+      if (!(value === null)) {
+        res.push(["value", value]);
+      }
+      port.send(res);
+      break;
+    case "localPut":
+      // Properties expected: key, value
+      // Properties sent: no return sent
+      // If "value" property is missing, delete key from localStorage
+      var key = props.key;
+      var value = props.value;
+      if (value === undefined) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(appkey(key), value)
+      }
       break;
     default:
       var res = [["operation", operation],
