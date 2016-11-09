@@ -223,8 +223,11 @@ simulatedLogout database model =
 
 dynamoInstallLoginScript : DynamoDb model msg -> model -> Cmd msg
 dynamoInstallLoginScript database model =
-  database.backendPort
-    [ ("operation", "installLoginScript") ]
+  Cmd.batch
+    [ database.backendPort
+        [ ("operation", "installLoginScript") ]
+    , localGetAccessToken database
+    ]
 
 intGenerator : Random.Generator Int
 intGenerator = Random.int Random.minInt Random.maxInt
@@ -314,8 +317,8 @@ jeProperties : Properties -> JE.Value
 jeProperties properties =
   JE.list <| List.map jePair properties
 
-localSaveAccessToken : Properties -> DynamoDb model msg -> Cmd msg
-localSaveAccessToken properties database =
+localPutAccessToken : Properties -> DynamoDb model msg -> Cmd msg
+localPutAccessToken properties database =
   let json = JE.encode 0 <| jeProperties properties
       props = [ ("operation", "localPut")
               , ("key", "accessToken")
@@ -323,6 +326,35 @@ localSaveAccessToken properties database =
               ]
   in
     database.backendPort props
+
+localGetAccessToken : DynamoDb model msg -> Cmd msg
+localGetAccessToken database =
+  database.backendPort
+    [ ("operation", "localGet")
+    , ("key", "accessToken")
+    ]
+
+jdPair : JD.Decoder (String, String)
+jdPair = JD.tuple2 (,) JD.string JD.string
+  
+jdProperties: JD.Decoder (Properties)
+jdProperties = JD.list jdPair
+
+-- Here on receiving the saved access token properties from localStorage
+accessTokenReceiver : String -> DynamoDb model msg -> model -> (model, Cmd msg)
+accessTokenReceiver json database model =
+  case JD.decodeString jdProperties json of
+    Err msg -> (model, Cmd.none)
+    Ok properties ->
+      case getProp "access_token" properties of
+        Nothing -> (model, Cmd.none)
+        Just accessToken ->
+          let modelProps = database.getProperties model
+          in
+            (database.setProperties
+               (mergeProps properties modelProps) model
+            , getAmazonUserProfile accessToken database
+            )
 
 -- Got an access token from the login code
 -- Need to look up the Profile
@@ -356,7 +388,7 @@ dynamoAccessToken properties database model =
         Just accessToken ->
             (database.setProperties
                (mergeProps properties modelProps) model
-            , Cmd.batch [ localSaveAccessToken properties database
+            , Cmd.batch [ localPutAccessToken properties database
                         , getAmazonUserProfile accessToken database
                         ]
             )
@@ -506,6 +538,8 @@ update properties database model =
             updateScan properties database model
           "logout" ->
             updateLogout properties database model
+          "localGet" ->
+            updateLocalGet properties database model
           "missing" ->
             Err <| otherError "Missing operation in properties."
           _ ->
@@ -593,3 +627,22 @@ updateLogout properties database model =
   in
     Ok <| dispatcher.logout database model
 
+updateLocalGet : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
+updateLocalGet properties database model =
+  case getProp "key" properties of
+    Nothing ->
+      Err <| otherError "Missing key in localGet return."
+    Just key ->
+      if key == "accessToken" then
+        case getProp "value" properties of
+          Nothing ->
+            Ok (model, Cmd.none)
+          Just value ->
+            case database of
+              Simulated _ ->
+                Ok (model, Cmd.none)
+              Dynamo dynamoDb ->
+                Ok <| accessTokenReceiver value dynamoDb model
+      else
+        -- Eventually support user localStore lookups here
+        Ok (model, Cmd.none)
