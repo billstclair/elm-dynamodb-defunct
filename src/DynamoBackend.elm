@@ -275,8 +275,8 @@ defaultSettings =
   in
       { settings | timeout = Time.minute }
 
-fetchProfileError : DynamoDb model msg -> Http.Error -> msg
-fetchProfileError database error =
+fetchProfileError : DynamoDb model msg -> model -> Http.Error -> msg
+fetchProfileError database model error =
   let msg = case error of
               Http.Timeout -> "timeout"
               Http.NetworkError -> "network error"
@@ -284,17 +284,22 @@ fetchProfileError database error =
                 "Unexpected Payload: " ++ json
               Http.BadResponse code err ->
                 "Bad Response: " ++ (toString code) ++ err
+      modelProps = database.getProperties model
   in
-    database.backendMsg
-      [("error" , "Profile fetch error: " ++ msg)]
+    case getProp "expectedState" modelProps of
+      Nothing ->
+        database.backendMsg [("operation", "nop")]
+      Just _ ->
+        database.backendMsg
+          [("error" , "Profile fetch error: " ++ msg)]
   
 profileReceived : DynamoDb model msg -> Properties -> msg
 profileReceived database properties =
   database.backendMsg
     <| setProp "operation" "login" properties
 
-getAmazonUserProfile : String -> DynamoDb model msg -> Cmd msg
-getAmazonUserProfile accessToken database =
+getAmazonUserProfile : String -> DynamoDb model msg -> model -> Cmd msg
+getAmazonUserProfile accessToken database model =
   let task = Http.send
                defaultSettings
                { verb = "get"
@@ -305,7 +310,7 @@ getAmazonUserProfile accessToken database =
       decoded = Http.fromJson (JD.keyValuePairs JD.string) task
   in
       Task.perform
-        (fetchProfileError database) (profileReceived database) decoded
+        (fetchProfileError database model) (profileReceived database) decoded
 
 jePair : (String, String) -> JE.Value
 jePair pair =
@@ -353,7 +358,13 @@ accessTokenReceiver json database model =
           in
             (database.setProperties
                (mergeProps properties modelProps) model
-            , getAmazonUserProfile accessToken database
+            , Cmd.batch
+                [ getAmazonUserProfile accessToken database model
+                , database.backendPort
+                    [ ("operation", "setAccessToken")
+                    , ("accessToken", accessToken)
+                    ]
+                ]
             )
 
 -- Got an access token from the login code
@@ -389,7 +400,7 @@ dynamoAccessToken properties database model =
             (database.setProperties
                (mergeProps properties modelProps) model
             , Cmd.batch [ localPutAccessToken properties database
-                        , getAmazonUserProfile accessToken database
+                        , getAmazonUserProfile accessToken database model
                         ]
             )
 
@@ -521,6 +532,8 @@ update properties database model =
                         Just op -> op
       in
         case operation of
+          "nop" ->
+            Ok (model, Cmd.none)
           "login" ->
             updateLogin properties database model
           "login-with-state" ->

@@ -271,6 +271,8 @@ function dispatch(properties, port) {
       // Properties expected: none
       // Properties sent: Nothing sent
       amazon.Login.logout();
+      localStorage.removeItem(appkey("accessToken"));
+      AWS.config.credentials.params.WebIdentityToken = "";
       break;
     case "put":
       // Properties expected: user, key, value
@@ -376,9 +378,17 @@ function dispatch(properties, port) {
       var key = props.key;
       var value = props.value;
       if (value === undefined) {
-        localStorage.removeItem(key);
+        localStorage.removeItem(appkey(key));
       } else {
         localStorage.setItem(appkey(key), value)
+      }
+      break;
+    case "setAccessToken":
+      // Properties expected: acesssToken
+      // Properties sent: no return sent
+      var accessToken = props.accessToken;
+      if (!(accessToken === undefined)) {
+        AWS.config.credentials.params.WebIdentityToken = accessToken;
       }
       break;
     default:
