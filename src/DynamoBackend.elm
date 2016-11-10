@@ -11,7 +11,7 @@
 
 module DynamoBackend exposing ( Profile, Properties, StringDict
                               , Database, ResultDispatcher
-                              , ErrorType(..), Error
+                              , ErrorType(..), Error, formatError
                               , getProp
                               , DynamoServerInfo , makeDynamoDb, isRealDatabase
                               , makeSimulatedDb
@@ -41,14 +41,38 @@ type alias Profile =
   }
 
 type ErrorType
-  = Timeout
-  | LoginExpired
+  = FetchProfileError
+  | AccessTokenError
+  | InternalError
+  | ReturnedProfileError
   | Other
+
+errorTypeToString : ErrorType -> String
+errorTypeToString errorType =
+  case errorType of
+    FetchProfileError -> "Fetch profile error"
+    AccessTokenError -> "Access token error"
+    InternalError -> "Internal error"
+    ReturnedProfileError -> "Returned profile error"
+    Other -> "Error"
+
+stringToErrorType : String -> ErrorType
+stringToErrorType string =
+  case string of
+    "Fetch profile error" -> FetchProfileError
+    "Access token error" -> AccessTokenError
+    "Internal error" -> InternalError
+    "Returned profile error" -> ReturnedProfileError
+    _ -> Other
 
 type alias Error =
   { errorType: ErrorType
   , message : String
   }
+
+formatError : Error -> String
+formatError error =
+  (errorTypeToString error.errorType) ++ ": " ++ error.message
 
 type alias ResultDispatcher model msg =
   { login : (Profile -> Database model msg -> model -> (model, Cmd msg))
@@ -288,10 +312,13 @@ fetchProfileError database model error =
   in
     case getProp "expectedState" modelProps of
       Nothing ->
+        -- Ignore errors for attempted use of previously saved access tokens.
         database.backendMsg [("operation", "nop")]
       Just _ ->
         database.backendMsg
-          [("error" , "Profile fetch error: " ++ msg)]
+          [ ("error" , msg)
+          , ("type", errorTypeToString FetchProfileError)
+          ]
   
 profileReceived : DynamoDb model msg -> Properties -> msg
 profileReceived database properties =
@@ -372,6 +399,7 @@ accessTokenReceiver json database model =
 dynamoAccessToken : Properties -> DynamoDb model msg -> model -> (model, Cmd msg)
 dynamoAccessToken properties database model =
   let modelProps = database.getProperties model
+      errorType = errorTypeToString AccessTokenError
       err = case getProp "expectedState" modelProps of
               Nothing -> ""
               Just expected ->
@@ -386,7 +414,9 @@ dynamoAccessToken properties database model =
     if err /= "" then
       ( model
       , makeMsgCmd
-          <| database.backendMsg [("error", err)]
+          <| database.backendMsg [ ("error", err)
+                                 , ("type", errorType)
+                                 ]
       )
     else
       case getProp "access_token" properties of
@@ -394,7 +424,9 @@ dynamoAccessToken properties database model =
           ( model
           , makeMsgCmd
               <| database.backendMsg
-                   [("error", "No access token returned from login.")]
+                   [ ("error", "No access token returned from login.")
+                   , ("type", errorType)
+                   ]
           )
         Just accessToken ->
             (database.setProperties
@@ -514,18 +546,20 @@ logout database model =
 -- Call this from the command that comes from the DynamoDb port or the simulator
 --
 
-otherError : String -> Error
-otherError message =
-  { errorType = Other
-  , message = message
-  }
+errorFromProperties : String -> Properties -> Error
+errorFromProperties message properties =
+  let errorType = case getProp "type" properties of
+                    Nothing -> Other
+                    Just string -> stringToErrorType string
+  in
+    Error errorType message
 
 update : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 update properties database model =
   case getProp "error" properties of
     Just err ->
       -- This needs more fleshing out
-      Err <| otherError <| "Backend error: " ++ err
+      Err <| errorFromProperties err properties
     Nothing ->
       let operation = case getProp "operation" properties of
                         Nothing -> "missing"
@@ -554,9 +588,9 @@ update properties database model =
           "localGet" ->
             updateLocalGet properties database model
           "missing" ->
-            Err <| otherError "Missing operation in properties."
+            Err <| Error InternalError "Missing operation in properties."
           _ ->
-            Err  <| otherError <| "Unknown operation: " ++ operation
+            Err  <| Error InternalError ("Unknown operation: " ++ operation)
             
 getDispatcher : Database model msg -> ResultDispatcher model msg
 getDispatcher database =
@@ -586,15 +620,15 @@ updateLogin : Properties -> Database model msg -> model -> Result Error (model, 
 updateLogin properties database model =
   case getProp "email" properties of
     Nothing ->
-      Err <| otherError "Missing email in login return."
+      Err <| Error ReturnedProfileError "Missing email in login return."
     Just email ->
       case getProp "name" properties of
         Nothing ->
-          Err <| otherError "Missing name in login return."
+          Err <| Error ReturnedProfileError "Missing name in login return."
         Just name ->
           case getProp "user_id" properties of
             Nothing ->
-              Err <| otherError "Missing userId in login return."
+              Err <| Error ReturnedProfileError "Missing userId in login return."
             Just userId ->
               let profile = { email = email
                             , name = name
@@ -608,7 +642,7 @@ updateGet : Properties -> Database model msg -> model -> Result Error (model, Cm
 updateGet properties database model =
   case getProp "key" properties of
     Nothing ->
-      Err <| otherError "Missing key in get return."
+      Err <| Error InternalError "Missing key in get return."
     Just key ->
       let value = getProp "value" properties
           dispatcher = getDispatcher database
@@ -619,7 +653,7 @@ updatePut : Properties -> Database model msg -> model -> Result Error (model, Cm
 updatePut properties database model =
   case getProp "key" properties of
     Nothing ->
-      Err <| otherError "Missing key in put return."
+      Err <| Error InternalError "Missing key in put return."
     Just key ->
       let dispatcher = getDispatcher database
           maybeValue = getProp "value" properties
@@ -644,7 +678,7 @@ updateLocalGet : Properties -> Database model msg -> model -> Result Error (mode
 updateLocalGet properties database model =
   case getProp "key" properties of
     Nothing ->
-      Err <| otherError "Missing key in localGet return."
+      Err <| Error InternalError "Missing key in localGet return."
     Just key ->
       if key == "accessToken" then
         case getProp "value" properties of

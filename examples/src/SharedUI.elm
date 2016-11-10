@@ -239,7 +239,7 @@ update msg model =
       case DB.update properties (mdb model) model of
         Err error ->
           -- Eventually, this will want to retry
-          ( { model | error = error.message }
+          ( { model | error = DB.formatError error }
           , Cmd.none
           )
         Ok (model', cmd) ->
