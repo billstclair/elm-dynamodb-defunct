@@ -10,15 +10,55 @@
 ----------------------------------------------------------------------
 
 module DynamoBackend exposing ( Profile, Properties, StringDict
-                              , Database, ResultDispatcher
+                              , Database, SimDb, DynamoDb, ResultDispatcher
                               , ErrorType(..), Error, formatError
-                              , getProp
+                              , getProp, setProp, removeProp, mergeProps
                               , DynamoServerInfo , makeDynamoDb, isRealDatabase
-                              , makeSimulatedDb
+                              , makeSimulatedDb, makeMsgCmd
                               , installLoginScript, login
                               , put, remove, get, scan, logout
                               , update
                               )
+
+{-| This module provides an Elm backend to Amazon's DynamoDB.
+
+By itself, in pure Elm, you can only access a simulation of the Dynamo
+database, with key/value pairs that persist only for the current
+session. The README for the GitHub archive tells how to hook up the
+JavaScript via ports to your application, and how to configure
+DynamoDB via Amazon's Web Services console for use with
+`DynamoBackend`.
+
+There is a simple example that clearly illustrates the difference
+between the pure-Elm simulator and the real Amazon backend.
+
+`DynamoBackend` targets a single DynamoDB table with three
+attributes. It enables use of that table by multiple Amazon accounts,
+with each account's data insulated from the others. It also allows
+multiple different applications to store their data in that one
+backend table, without interference.
+
+The data store is a simple key/value store, mapping a string key to
+string data. I expect that one common use will be to JSON encode
+state, and store it by key. I built it to do that for my application.
+
+The one drawback of Amazon's authentication mechanism that I was not
+able to work around is that a login session lasts only one hour. Each
+hour, your users will have to click on the "OK" button in the login
+dialog, to renew the session. I consider this to be a bug on Amazon's
+part.
+
+# Classes
+@docs Profile, Properties, StringDict, DynamoServerInfo, ResultDispatcher
+@docs Database, SimDb, DynamoDb
+@docs ErrorType, Error
+
+# Functions
+@docs formatError, getProp, setProp, removeProp, mergeProps
+@docs makeDynamoDb, makeSimulatedDb, isRealDatabase, makeMsgCmd
+@docs installLoginScript, login, put, remove, get, scan, logout, update
+
+-}
 
 import String
 import Dict exposing (Dict)
@@ -34,11 +74,40 @@ import Task
 
 import Debug exposing (log)
 
+{-| The application-level result of a successful login -}
 type alias Profile =
   { email : String
   , name : String
   , userId : String
   }
+
+{-| Errors that can be returned in the errorType property of an Error
+record.
+
+`AccessExpired` - Happens when your Amazon login session expires. Your
+application needs to call `DynamoBackend.login` again to establish a new
+session.
+
+`FetchProfileError` - denotes a problem in turning an access token into a
+profile.
+
+`AccessTokenError` - Either Amazon didn't return the state arg when
+logging in, or a cross-site forgery made the state sent not match the
+state received.
+
+`InternalError` - denotes a bug in the `DynamoBackend` code. Shouldn't
+happen.
+
+`ReturnedProfileError` - Means that Amazon's return for profile lookup
+was missing the email, name, or userId.
+
+`AwsError` - An error was returned by the Amazon AWS JavaScript
+library. Usually denotes a network problem.
+
+`Other` - Shouldn't happen. Means that that the backend code neglected
+to tag an error with a "type".
+
+-}
 
 type ErrorType
   = FetchProfileError
@@ -71,11 +140,13 @@ stringToErrorType string =
     "AWS error" -> AwsError "" "" False
     _ -> Other
 
+{-| DynamoBackend.update returns errors in an `Error` record. -}
 type alias Error =
   { errorType: ErrorType
   , message : String
   }
 
+{-| Format an `Error` record as a string -}
 formatError : Error -> String
 formatError error =
   case error.errorType of
@@ -86,6 +157,25 @@ formatError error =
     errorType ->
       (errorTypeToString errorType) ++ ": " ++ error.message
 
+{-| When results return from the backend, they are passed to one of
+these functions that you provide.
+
+`DynamoBackend.login` gives results to the `ResultDispatcher.login`
+function.
+
+`DynamoBackend.get` gives results to the `ResultDispatcher.get`
+function.
+
+`DynamoBackend.put` and `DynamoBackend.remove` give results to the
+`ResultDispatcher.put` function.
+
+`DynamoBackend.scan` gives results to the `ResultDispatcher.scan`
+function.
+
+`DynamoBackend.logout` results to the `ResultDispatcher.logout`
+function.
+-}
+
 type alias ResultDispatcher model msg =
   { login : (Profile -> Database model msg -> model -> (model, Cmd msg))
   , get : (String -> Maybe String -> Database model msg -> model -> (model, Cmd msg))
@@ -94,29 +184,59 @@ type alias ResultDispatcher model msg =
   , logout : (Database model msg -> model -> (model, Cmd msg))
   }
 
+{-| The communication through the ports to the backend JavaScript
+happens with `Properties` lists, lists of string pairs.
+-}
 type alias Properties =
   List (String, String)
 
+{-| Lookup a key in a `Properties` list. Return `Nothing` if its not
+there, or `Just value` if it is.
+-}
 getProp : String -> Properties -> Maybe String
 getProp key properties =
   case LE.find (\a -> key == (fst a)) properties of
     Nothing -> Nothing
     Just (k, v) -> Just v
 
+{-| Set the value for a key to a value in a `Properties` list.
+
+`setProp key value properties`
+-}
 setProp : String -> String -> Properties -> Properties
 setProp key value properties =
   (key, value) :: (List.filter (\(k, _) -> k /= key) properties)
 
+{-| Remove the property for a key from a `Properties` list. -}
 removeProp : String -> Properties -> Properties
 removeProp key properties =
   List.filter (\(k, _) -> k /= key) properties
 
+{-| Merge two `Properties` lists.
+
+If both contain a value for the same key, use the value from the first
+list (`from`).
+
+`mergeProps from to`
+-}
 mergeProps : Properties -> Properties -> Properties
 mergeProps from to =
   List.foldr
     (\pair props -> setProp (fst pair) (snd pair) props)
     to from
 
+{-| This record is sent to Elm as the "flags" argument from the
+startup code. It is stored internally by the JavaScript backend code,
+and isn't used by any of the Elm code, except that you store it in
+your Dynamo database. Can be useful for debugging (though I'm tempted
+to leave it solely in the JavaScript code).
+
+The properties are setup in Amazon's AWS Console for DynamoDB, and are
+stored in a JavaScript file that you create.
+
+This is not secret information. It simply identifies your application
+and the table you use to store your key/value pairs.
+-}
 type alias DynamoServerInfo =
   { clientId : String
   , tableName : String
@@ -126,6 +246,25 @@ type alias DynamoServerInfo =
   , awsRegion : String
   }
 
+{-| Properties for a real `Dynamo` backend `Database`.
+
+`serverInfo` - The ServerInfo record sent in as the startup "flags" from
+the JavaScript.
+
+`getProperties` - Your Model must contain a `Properties` list that the
+`DynamoBackend` code can use to store state. This function extracts that
+list from your `Model`.
+
+`setProperties` - Set the `Properties` list in your `Model`.
+
+`backendPort` - your outgoing backend `port` to the JavaScript code.
+
+`backendMsg` - Create a message as if it came from the incoming backend
+port to the JavaScript code.
+
+`dispatcher` - The record of functions to call for return data from the
+backend JavaScript.
+-}
 type alias DynamoDb model msg =
   { serverInfo : DynamoServerInfo
   , getProperties : (model -> Properties)
@@ -135,9 +274,30 @@ type alias DynamoDb model msg =
   , dispatcher : ResultDispatcher model msg
   }
 
+{-| An Elm `Dict` mapping `String` keys to `String` values.
+
+You need to provide one of these in your Model for the simulated
+backend.
+-}
 type alias StringDict =
   Dict String String
 
+{-| Properties for a simulated backend `Database`.
+
+`profile` - A fake login `Profile`.
+
+`getDict` - Return from your `Model` an Elm `Dict` in which the
+simulator can store its key/value pairs.
+
+`setDict` - Set the dictionary in your `Model`.
+
+`simulatedPort` - This simulates the return port from the real
+backend. `DynamoBackend.makeMsgCmd` is often useful for turning one of
+your messages into a `Cmd`.
+
+`dispatcher` - The `ResultDispatcher` that will handle the values returned
+through the `simulatedPort`.
+-}
 type alias SimDb model msg =
   { profile: Profile
   , getDict : (model -> StringDict)
@@ -146,25 +306,46 @@ type alias SimDb model msg =
   , dispatcher : ResultDispatcher model msg
   }
 
+{-| The generic type for a `Simulated` or `Dynamo` database -}
 type Database model msg
   = Simulated (SimDb model msg)
   | Dynamo (DynamoDb model msg)
 
+{-| Create a real `Dynamo` backend `Database`.
+
+The arguments become the properties of the returned (wrapped) `DynamoDb` record.
+-}
+makeDynamoDb : DynamoServerInfo -> (model -> Properties) ->
+  (Properties -> model -> model) -> (Properties -> Cmd msg) ->
+  (Properties -> msg) -> ResultDispatcher model msg -> Database model msg
 makeDynamoDb
   serverInfo getProperties setProperties backendPort backendMsg dispatcher =
     Dynamo <|
       DynamoDb
         serverInfo getProperties setProperties backendPort backendMsg dispatcher
 
+{-| Create a simulated backend `Database`.
+
+The arguments become the properties of the returned (wrapped) `SimDb` record.
+-}
+makeSimulatedDb : Profile -> (model -> StringDict) -> (StringDict ->
+  model -> model) -> (Properties -> Cmd msg) -> ResultDispatcher model
+  msg -> Database model msg
+
 makeSimulatedDb profile getDict setDict simulatedPort dispatcher =
   Simulated <|
     SimDb profile getDict setDict simulatedPort dispatcher
 
+{-| Return `True` if the argument is a real datbase (the result of
+calling `makeDynamoDb`) or `False` if it is simulated (from
+`makeSimulatedDb`).
+-}
 isRealDatabase : Database model msg -> Bool
 isRealDatabase database =
   case database of
     Simulated _ -> False
     Dynamo _ -> True
+
 ---
 --- Simulated database API
 ---
@@ -296,6 +477,7 @@ dynamoLoginWithState state database model =
         ]
     )
 
+{-| Wrap a message as a `Cmd`. -}
 makeMsgCmd : msg -> Cmd msg
 makeMsgCmd msg =
   Task.perform identity identity (Task.succeed msg)
@@ -498,6 +680,12 @@ dynamoLogout database model =
 -- User-visible database API
 --
 
+{-| The Amazon login code attaches a script to the `<div>` with an id of
+`"amazon-root"`. Your view code needs to create that `<div>`. Call this
+when your application starts to attach the login script. It will
+auto-login if a recent session in the same browser has not yet
+expired.
+-}
 installLoginScript : Database model msg -> model -> Cmd msg
 installLoginScript database model =
   case database of
@@ -506,6 +694,9 @@ installLoginScript database model =
     Dynamo dynamoDb ->
       dynamoInstallLoginScript dynamoDb model
 
+{-| Call this when the user clicks on your "login" button, or
+when you get an `AccessExpired` error.
+-}
 login : Database model msg -> model -> Cmd msg
 login database model =
   case database of
@@ -514,6 +705,11 @@ login database model =
     Dynamo dynamoDb ->
       dynamoLogin dynamoDb model
 
+{-| Call this to store a key/value pair in the database. 
+The `userId` comes from the `Profile` record.
+
+`put userId key value database`
+-}
 put : String -> String -> String -> Database model msg -> model -> (model, Cmd msg)
 put userId key value database model =
   case database of
@@ -522,6 +718,11 @@ put userId key value database model =
     Dynamo dynamoDb ->
       dynamoPut userId key value dynamoDb model
 
+{-| Call this to remove a key/value pair from the database.
+The `userId` comes from the `Profile` record.
+
+`remove userId key database`
+-}
 remove : String -> String -> Database model msg -> model -> (model, Cmd msg)
 remove userId key database model =
   case database of
@@ -530,6 +731,11 @@ remove userId key database model =
     Dynamo dynamoDb ->
       dynamoRemove userId key dynamoDb model
 
+{-| Call this to get the value for a key from the database.
+The `userId` comes from the `Profile` record.
+
+`get userId key database`
+-}
 get : String -> String -> Database model msg -> model -> Cmd msg
 get userId key database model =
   case database of
@@ -538,6 +744,13 @@ get userId key database model =
     Dynamo dynamoDb ->
       dynamoGet userId key dynamoDb model
 
+{-| Call this to scan the database for all keys. If `fetchValues` is
+`True`, will also return values.
+
+The `userId` comes from the `Profile` record.
+
+`scan fetchValues userId database`
+-}
 scan : Bool -> String -> Database model msg -> model -> Cmd msg
 scan fetchValues userid database model =
   case database of
@@ -546,6 +759,9 @@ scan fetchValues userid database model =
     Dynamo dynamoDb ->
       dynamoScan fetchValues userid dynamoDb model
 
+{-| Call this to logout from Amazon.
+Clears all state the could be used to create a session.
+-}
 logout : Database model msg -> model -> Cmd msg
 logout database model =
   case database of
@@ -553,10 +769,6 @@ logout database model =
       simulatedLogout simDb model
     Dynamo dynamoDb ->
       dynamoLogout dynamoDb model
-
---
--- Call this from the command that comes from the DynamoDb port or the simulator
---
 
 errorFromProperties : String -> Properties -> Error
 errorFromProperties message properties =
@@ -583,6 +795,13 @@ errorFromProperties message properties =
       _ ->
         Error errorType message
 
+{-| This handles the `Properties` that are sent back from the backend
+JavaScript (real or simulated). Your application needs to map that
+command to a message, and handle that message by calling
+`DynamoBackend.update`, and then process the resulting `Err` or `Ok`
+value. Before returning, it will usually call one of the functions in
+the database's `ResultSetDispatcher`.
+-}
 update : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 update properties database model =
   case getProp "error" properties of

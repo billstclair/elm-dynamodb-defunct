@@ -138,9 +138,7 @@ logoutReceiver database model =
   , Cmd.none
   )
 
-makeMsgCmd : Msg -> Cmd Msg
-makeMsgCmd msg =
-  Task.perform identity identity (Task.succeed msg)
+makeMsgCmd = DB.makeMsgCmd
 
 backendCmd : DB.Properties -> Cmd Msg
 backendCmd properties =
