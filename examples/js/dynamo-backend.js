@@ -241,11 +241,11 @@ function propertiesToObject(properties) {
 
 function errorProperties(operation, err) {
   return [ ["operation", operation],
-           ["code", err.code],
-           ["error", err.message]
+           ["code", err.code || ""],
+           ["error", err.message || ""]
+           ["retryable", err.retryable ? "true" : "false"]
          ];
 }
-
 
 // The top-level entry-point. Called from the users's HTML file.
 // Properties is an array of two-element arrays: [[key, value],...]

@@ -45,6 +45,8 @@ type ErrorType
   | AccessTokenError
   | InternalError
   | ReturnedProfileError
+  | AccessExpired
+  | AwsError String String Bool -- operation, code, retryable
   | Other
 
 errorTypeToString : ErrorType -> String
@@ -54,6 +56,8 @@ errorTypeToString errorType =
     AccessTokenError -> "Access token error"
     InternalError -> "Internal error"
     ReturnedProfileError -> "Returned profile error"
+    AccessExpired -> "Access expired"
+    AwsError _ _ _ -> "AWS error"
     Other -> "Error"
 
 stringToErrorType : String -> ErrorType
@@ -63,6 +67,8 @@ stringToErrorType string =
     "Access token error" -> AccessTokenError
     "Internal error" -> InternalError
     "Returned profile error" -> ReturnedProfileError
+    "Access expired" -> AccessExpired
+    "AWS error" -> AwsError "" "" False
     _ -> Other
 
 type alias Error =
@@ -72,7 +78,13 @@ type alias Error =
 
 formatError : Error -> String
 formatError error =
-  (errorTypeToString error.errorType) ++ ": " ++ error.message
+  case error.errorType of
+    AwsError operation code retryable ->
+      "AWS error, operation: " ++ operation ++ ", code: " ++ code ++
+        ", retryable: " ++ (if retryable then "true" else "false") ++
+        ", message: " ++ error.message
+    errorType ->
+      (errorTypeToString errorType) ++ ": " ++ error.message
 
 type alias ResultDispatcher model msg =
   { login : (Profile -> Database model msg -> model -> (model, Cmd msg))
@@ -552,13 +564,29 @@ errorFromProperties message properties =
                     Nothing -> Other
                     Just string -> stringToErrorType string
   in
-    Error errorType message
+    case errorType of
+      AwsError _ _ _ ->
+        let operation = case getProp "operation" properties of
+                          Nothing -> ""
+                          Just op -> op
+            code = case getProp "code" properties of
+                     Nothing -> ""
+                     Just cd -> cd
+            retryable = case getProp "retryable" properties of
+                          Just "true" -> True
+                          _ -> False
+        in
+          if code == "CredentialsError" then
+            Error AccessExpired message
+          else
+            Error (AwsError operation code retryable) message
+      _ ->
+        Error errorType message
 
 update : Properties -> Database model msg -> model -> Result Error (model, Cmd msg)
 update properties database model =
   case getProp "error" properties of
     Just err ->
-      -- This needs more fleshing out
       Err <| errorFromProperties err properties
     Nothing ->
       let operation = case getProp "operation" properties of

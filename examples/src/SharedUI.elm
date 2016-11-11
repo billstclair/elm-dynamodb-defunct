@@ -44,6 +44,7 @@ type alias Model =
   , key : String                -- displayed key input
   , value : String              -- displayed value input
   , error : String
+  , loggedInOnce : Bool
   }
 
 mdb : Model -> Database
@@ -66,8 +67,16 @@ type DbType
 
 loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
 loginReceiver profile database model =
-  ( { model | profile = Just profile }
-  , DB.scan False profile.userId database model
+  ( { model |
+      profile = Just profile
+    , loggedInOnce = True
+    }
+  , if model.loggedInOnce then
+      -- This should retry the command that got the AccessExpired error.
+      -- Go ahead. Call me lazy.
+      Cmd.none
+    else
+      DB.scan False profile.userId database model
   )
 
 insertInKeys : String -> List String -> List String
@@ -159,6 +168,7 @@ sharedInit database =
     , key = ""
     , value = ""
     , error = ""
+    , loggedInOnce = False
     }
   , Cmd.none 
   )
@@ -238,10 +248,15 @@ update msg model =
     BackendMsg properties ->
       case DB.update properties (mdb model) model of
         Err error ->
-          -- Eventually, this will want to retry
-          ( { model | error = DB.formatError error }
-          , Cmd.none
-          )
+          case error.errorType of
+            DB.AccessExpired ->
+              ( { model | error = "" }
+              , makeMsgCmd Login
+              )
+            _ ->
+              ( { model | error = DB.formatError error }
+              , Cmd.none
+              )
         Ok (model', cmd) ->
           ( { model' | error = "" }
           , cmd
