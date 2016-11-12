@@ -2,6 +2,8 @@
 
 This page is a guide to configuring [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) for use by the DynamoBackend library. You'll also need to read [Using the DynamoBackend JavaScript](port-setup.md).
 
+## Create Your Application
+
 First you need to create an Amazon application. You'll need its "Application ID" when  you create the security role that allows people to access your DynamoDB table with their Amazon account credentials.
 
 In order to register an application, you need to create a "Privacy Notice" page on your application's web site. There are no requirements I've seen for the contents of that page. I created [kakuro-dojo.com/privacy.html](kakuro-dojo.com/privacy.html) for my Kakuro game.
@@ -31,6 +33,8 @@ Save the "Client ID", beginning with "amzn1.application-oa2-client." You'll need
 You will want to return here to enter "Android Settings" and "IOS Settings", if you decide to wrap your application as a smart phone app and distribute it on one of those app stores.
 
 There doesn't appear to be any way to delete an application once you've created it, though you could change all its properties to repurpose it for something else. So I'm stuck with my "DynamoBackend Example" application.
+
+## Create Your DynamoDB table
 
 Go to the [Amazon DynamoDB home page](https://aws.amazon.com/dynamodb/). Click on "Sign In to the Console":
 
@@ -69,6 +73,8 @@ Now go to the "Access control" tab, set the "Identity provider" to "Login with A
 ![Access Control](https://raw.githubusercontent.com/billstclair/elm-dynamodb-images/master/08-access-control.png)
 
 Save the JSON in the box to the right of the "Create policy" button, you'll need it below.
+
+## Create An Access Policy and Attach It to Your Table
 
 The "Attach policy instructions" on that page are close, but not quite accurate. First, leave this browser tab as is, and in a new tab, create a new policy:
 

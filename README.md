@@ -12,7 +12,7 @@ Both are tiny wrappers around [examples/src/SharedUI.elm](examples/src/SharedUI.
 
 The library itself is in [src/DynamoBackend.elm](src/DynamoBackend.elm).
 
-It takes a little configuration to make the real backend ports work on your own site with your own DynamoDB table. I haven't documented that yet.
+It takes some configuration to make the real backend ports work on your own site with your own DynamoDB table. The process of creating the backend table on Amazon's web site is documented in [Configuring Amazon DynamoDB for DynamoBackend](amazon-setup.md). Hooking the Elm port JavaScript into your code is documented in [Using the DynamoBackend JavaScript](port-setup.md).
 
 Bill St. Clair &lt;billstclair@gmail.com&gt;<br/>
-6 November 2016
+12 November 2016
