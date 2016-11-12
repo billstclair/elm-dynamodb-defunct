@@ -48,7 +48,7 @@ Click "Create Table" on the DynamoDB "Dashboard":
 
 ![DynamoDB Dashboard](https://raw.githubusercontent.com/billstclair/elm-dynamodb-images/master/04-dashboard.png)
 
-Fillin whichever "Table name" you want, "user" as a "String" field for the "Primary key", check "Add sort key", and enter "appkey" as the sort key. Leave "Use default settings" checked, and click "Create":
+Fillin whichever "Table name" you want, "user" as a "String" field for the "Primary key", check "Add sort key", and enter "appkey" as the sort key. Leave "Use default settings" checked, and click "Create" (the names "user" and "appkey" are baked in to the [distributed JavaScript](examples/js/dynamo-backend.js). You could use different names, but you'd have to edit the JavaScript to match):
 
 ![Create Table](https://raw.githubusercontent.com/billstclair/elm-dynamodb-images/master/05-create-table.png)
 
