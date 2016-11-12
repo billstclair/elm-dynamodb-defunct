@@ -17,7 +17,7 @@ Then aim your browser at http://localhost:8000/src/simulated.elm.
 
 Both are thin wrappers around the code in [src/SharedUI.elm](src/SharedUI.elm).
 
-See [Configuring Amazon DynamoDB for DynamoBackend](../amazon-setup.md) for directions on setting up your own DynamoDB table. See [Using the DynamoBackend JavaScript](../port-setup.md) for directions on configuring your application to use the ports to [site/js/dynamo-backend.js](site/js/dynamo-backend.js).
+See [Configuring Amazon DynamoDB for DynamoBackend](../amazon-setup.md) for directions on setting up your own DynamoDB table. See [Using the DynamoBackend JavaScript](../port-setup.md) for directions on configuring your application to use the ports to [dynamo-backend.js](site/js/dynamo-backend.js).
 
 ## <a name="use">How to use the interface</a>
 
@@ -40,4 +40,4 @@ Pressing the "Refresh" button will refresh the table's keys AND values from the 
 The key/value pairs entered in the real backend example are persistent until you stop paying Amazon, or remove them. For the simulated database, they last for only one session. They do, however, survive "Logout" followed by "Login".
 
 Bill St. Clair &lt;billstclair@gmail.com&gt;<br/>
-6 November 2016
+12 November 2016
