@@ -11,13 +11,13 @@ elm reactor
 
 Then aim your browser at http://localhost:8000/src/simulated.elm.
 
-[src/simulated.elm](src/simulated.elm) is also live at [kakuro-dojo.com/simulated.html](https://kakuro-dojo.com/simulated.html).
+[src/simulated.elm](src/simulated.elm) is live at [kakuro-dojo.com/simulated.html](https://kakuro-dojo.com/simulated.html).
 
 [src/real.elm](src/real.elm) is an example using the real DynamoDB backend. It will NOT run in `elm-reactor`. It is live, using a table in my Amazon AWS account, at [kakuro-dojo.com/dynamo-example.html](https://kakuro-dojo.com/dynamo-example.html).
 
 Both are thin wrappers around the code in [src/SharedUI.elm](src/SharedUI.elm).
 
-I'll write documentation soon about how to set up your own DynamoDB table and to configure your application to use the ports to [js/dynamo-backend.js](js/dynamo-backend.js).
+See [Configuring Amazon DynamoDB for DynamoBackend](../amazon-setup.md) for directions on setting up your own DynamoDB table. See [Using the DynamoBackend JavaScript](../port-setup.md) for directions on configuring your application to use the ports to [site/js/dynamo-backend.js](site/js/dynamo-backend.js).
 
 ## <a name="use">How to use the interface</a>
 
