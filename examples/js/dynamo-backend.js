@@ -242,7 +242,7 @@ function propertiesToObject(properties) {
 function errorProperties(operation, err) {
   return [ ["operation", operation],
            ["code", err.code || ""],
-           ["error", err.message || ""]
+           ["error", err.message || ""],
            ["retryable", err.retryable ? "true" : "false"]
          ];
 }
