@@ -1,11 +1,7 @@
 #!/bin/bash
 
 elm make src/real.elm --output site/js/Main.js
-cp -P js/dynamo-backend.js site/js/
-cp -P js/dynamo-server-info.js site/js/
-cp -P js/aws-sdk-2.6.15.min.js site/js/
-cp -P dynamo-example.html site/
 cd site
-rsyncit
+../bin/rsyncit
 
 
