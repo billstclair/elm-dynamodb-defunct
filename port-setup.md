@@ -315,7 +315,7 @@ logoutReceiver database model =
   )
 ```
 
-An Amazon login session lasts for only an hour. There is currently no way to extend that period except to present the user with another login dialog. DynamoBackend helps you to do that, and to retry the last operation after the user logs in again. Here's the code that uses that from [examples/src/SharedUI.elm](examples/src/SharedUI.elm), with the relevant lines marked with asterisk comments:
+An Amazon login session lasts for only an hour. There is currently no way to extend that period except to present the user with another login dialog. `DynamoBackend` helps you to do that, and to retry the last operation after the user logs in again. Here's the code that uses that from [examples/src/SharedUI.elm](examples/src/SharedUI.elm), with the relevant lines marked with asterisk comments:
 
 ```
 type alias Model =
