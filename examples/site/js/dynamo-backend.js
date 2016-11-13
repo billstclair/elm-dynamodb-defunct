@@ -239,13 +239,13 @@ function propertiesToObject(properties) {
   return res;
 }
 
-function errorProperties(operation, err) {
-  return [ ["operation", operation],
-           ["type", "AWS error"],
-           ["code", err.code || ""],
-           ["error", err.message || ""],
-           ["retryable", err.retryable ? "true" : "false"]
-         ];
+function errorProperties(properties, operation, err) {
+  properties.push( ["errorType", "AWS error"],
+                   ["code", err.code || ""],
+                   ["error", err.message || ""],
+                   ["retryable", err.retryable ? "true" : "false"]
+                 )
+  return properties;
 }
 
 // The top-level entry-point. Called from the users's HTML file.
@@ -291,7 +291,7 @@ function dispatch(properties, port) {
       updateItem(props.user, props.key, props.value, function(err, data) {
         var res;
         if (err) {
-          res = errorProperties("put", err);
+          res = errorProperties(properties, "put", err);
         } else {
           res = properties;
         }
@@ -305,7 +305,7 @@ function dispatch(properties, port) {
       getItem(props.user, props.key, function(err, data) {
         var res;
         if (err) {
-          res = errorProperties("get", err);
+          res = errorProperties(properties, "get", err);
         } else {
           var item = data.Item;
           var s = null;
@@ -329,7 +329,7 @@ function dispatch(properties, port) {
       deleteItem(props.user, props.key, function(err, data) {
         var res;
         if (err) {
-          res = errorProperties("remove", err);
+          res = errorProperties(properties, "remove", err);
         } else {
           res = properties;
         }
@@ -344,7 +344,7 @@ function dispatch(properties, port) {
       scanKeys(fetchValues, props.user, function (err, data) {
         var res;
         if (err) {
-          res = errorProperties("scan", err);
+          res = errorProperties(properties, "scan", err);
         } else {
           res = properties;
           var items = data.Items;

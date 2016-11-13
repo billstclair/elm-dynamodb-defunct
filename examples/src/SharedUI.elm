@@ -45,6 +45,7 @@ type alias Model =
   , value : String              -- displayed value input
   , error : String
   , loggedInOnce : Bool
+  , retryProperties : Maybe DB.Properties
   }
 
 mdb : Model -> Database
@@ -70,11 +71,13 @@ loginReceiver profile database model =
   ( { model |
       profile = Just profile
     , loggedInOnce = True
+    , retryProperties = Nothing
     }
   , if model.loggedInOnce then
-      -- This should retry the command that got the AccessExpired error.
-      -- Go ahead. Call me lazy.
-      Cmd.none
+      case model.retryProperties of
+        Nothing -> Cmd.none
+        Just retryProperties ->
+          DB.retry database retryProperties
     else
       DB.scan False profile.userId database model
   )
@@ -168,6 +171,7 @@ sharedInit database =
     , value = ""
     , error = ""
     , loggedInOnce = False
+    , retryProperties = Nothing
     }
   , Cmd.none 
   )
@@ -255,10 +259,11 @@ update msg model =
       case DB.update properties (mdb model) model of
         Err error ->
           case error.errorType of
-            DB.AccessExpired ->
+            DB.AccessExpired retryProperties ->
               ( { model |
                   error = ""
                 , profile = Nothing
+                , retryProperties = Just retryProperties
                 }
               , makeMsgCmd Login
               )

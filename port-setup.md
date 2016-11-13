@@ -315,6 +315,47 @@ logoutReceiver database model =
   )
 ```
 
+An Amazon login session lasts for only an hour. There is currently no way to extend that period except to present the user with another login dialog. DynamoBackend helps you to do that, and to retry the last operation after the user logs in again. Here's the code that uses that from [examples/src/SharedUI.elm](examples/src/SharedUI.elm), with the relevant lines marked with asterisk comments:
+
+```
+type alias Model =
+  { ...
+  , retryProperties : Maybe DB.Properties     -- *****
+  }
+  
+loginReceiver profile database model =
+  ( { model |
+      profile = Just profile
+    , loggedInOnce = True
+    , retryProperties = Nothing               -- *****
+    }
+  , if model.loggedInOnce then
+      case model.retryProperties of
+        Nothing -> Cmd.none
+        Just retryProperties ->               -- *****
+          DB.retry database retryProperties   -- *****
+    else
+      DB.scan False profile.userId database model
+  )
+
+update msg model =
+  case msg of
+    ...
+    BackendMsg properties ->
+      case DB.update properties (mdb model) model of
+        Err error ->
+          case error.errorType of
+            DB.AccessExpired retryProperties ->            -- *****
+              ( { model |
+                  error = ""
+                , profile = Nothing
+                , retryProperties = Just retryProperties   -- *****
+                }
+              , makeMsgCmd Login
+              )
+        ...
+```
+
 ## Whew!
 
 Happy hacking!

@@ -12,10 +12,10 @@
 module DynamoBackend exposing ( Profile, Properties, StringDict
                               , Database, SimDb, DynamoDb, ResultDispatcher
                               , ErrorType(..), Error, formatError
-                              , getProp, setProp, removeProp, mergeProps
+                              , getProp, setProp, removeProp, removeProps, mergeProps
                               , DynamoServerInfo , makeDynamoDb, isRealDatabase
                               , makeSimulatedDb, makeMsgCmd
-                              , installLoginScript, login
+                              , installLoginScript, login, retry
                               , put, remove, get, scan, logout, partialLogout
                               , update
                               )
@@ -54,9 +54,9 @@ part.
 @docs ErrorType, Error
 
 # Functions
-@docs formatError, getProp, setProp, removeProp, mergeProps
+@docs formatError, getProp, setProp, removeProp, removeProps, mergeProps
 @docs makeDynamoDb, makeSimulatedDb, isRealDatabase, makeMsgCmd
-@docs installLoginScript, login, put, remove, get, scan, logout
+@docs installLoginScript, login, retry, put, remove, get, scan, logout
 @docs partialLogout, update
 
 -}
@@ -106,7 +106,7 @@ was missing the email, name, or userId.
 library. Usually denotes a network problem.
 
 `Other` - Shouldn't happen. Means that that the backend code neglected
-to tag an error with a "type".
+to tag an error with an "errorType".
 
 -}
 
@@ -115,7 +115,7 @@ type ErrorType
   | AccessTokenError
   | InternalError
   | ReturnedProfileError
-  | AccessExpired
+  | AccessExpired Properties
   | AwsError String String Bool -- operation, code, retryable
   | Other
 
@@ -126,7 +126,7 @@ errorTypeToString errorType =
     AccessTokenError -> "Access token error"
     InternalError -> "Internal error"
     ReturnedProfileError -> "Returned profile error"
-    AccessExpired -> "Access expired"
+    AccessExpired _ -> "Access expired"
     AwsError _ _ _ -> "AWS error"
     Other -> "Error"
 
@@ -137,7 +137,7 @@ stringToErrorType string =
     "Access token error" -> AccessTokenError
     "Internal error" -> InternalError
     "Returned profile error" -> ReturnedProfileError
-    "Access expired" -> AccessExpired
+    "Access expired" -> AccessExpired []
     "AWS error" -> AwsError "" "" False
     _ -> Other
 
@@ -212,6 +212,14 @@ setProp key value properties =
 removeProp : String -> Properties -> Properties
 removeProp key properties =
   List.filter (\(k, _) -> k /= key) properties
+
+{-| Remove a list of keys from a `Properties` list. -}
+removeProps : List String -> Properties -> Properties
+removeProps keys properties =
+  case keys of
+    [] -> properties
+    ( key :: tail ) ->
+      removeProps tail <| removeProp key properties
 
 {-| Merge two `Properties` lists.
 
@@ -512,7 +520,7 @@ fetchProfileError database model error =
       Just _ ->
         database.backendMsg
           [ ("error" , msg)
-          , ("type", errorTypeToString FetchProfileError)
+          , ("errorType", errorTypeToString FetchProfileError)
           ]
   
 profileReceived : DynamoDb model msg -> Properties -> msg
@@ -610,7 +618,7 @@ dynamoAccessToken properties database model =
       ( model
       , makeMsgCmd
           <| database.backendMsg [ ("error", err)
-                                 , ("type", errorType)
+                                 , ("errorType", errorType)
                                  ]
       )
     else
@@ -620,7 +628,7 @@ dynamoAccessToken properties database model =
           , makeMsgCmd
               <| database.backendMsg
                    [ ("error", "No access token returned from login.")
-                   , ("type", errorType)
+                   , ("errorType", errorType)
                    ]
           )
         Just accessToken ->
@@ -706,6 +714,26 @@ login database model =
     Dynamo dynamoDb ->
       dynamoLogin dynamoDb model
 
+{-| Call this to retry an operation that got an AccessExpired error
+-}
+retry : Database model msg -> Properties -> Cmd msg
+retry database properties =
+  let retry = getProp "retry" properties
+      properties' = case retry of
+                      Nothing ->
+                        ("retry", "Command retry failed.")
+                        :: properties
+                      Just message ->
+                        [ ("error", message) ]
+  in
+    case database of
+      Simulated simDb ->
+        simDb.simulatedPort properties'
+      Dynamo dynamoDb ->
+        case retry of
+          Nothing -> dynamoDb.backendPort properties'
+          Just _ -> makeMsgCmd <| dynamoDb.backendMsg properties
+
 {-| Call this to store a key/value pair in the database. 
 The `userId` comes from the `Profile` record.
 
@@ -785,9 +813,13 @@ partialLogout database model =
       in
         dynamoDb.backendPort props
 
+errorKeys : List String
+errorKeys =
+  [ "errorType", "code", "error", "retryable" ]
+
 errorFromProperties : String -> Properties -> Error
 errorFromProperties message properties =
-  let errorType = case getProp "type" properties of
+  let errorType = case getProp "errorType" properties of
                     Nothing -> Other
                     Just string -> stringToErrorType string
   in
@@ -804,7 +836,7 @@ errorFromProperties message properties =
                           _ -> False
         in
           if code == "CredentialsError" then
-            Error AccessExpired message
+            Error (AccessExpired (removeProps errorKeys properties)) message
           else
             Error (AwsError operation code retryable) message
       _ ->

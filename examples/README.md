@@ -37,6 +37,8 @@ The table with "Key" and "Value" headings shows the known keys. Initially, it wo
 
 Pressing the "Refresh" button will refresh the table's keys AND values from the databse.
 
+For the real DynamoDB backend, there is an "Access Expired" button next to the "Logout" button. Pressing this will simulate expiration of the current login session. The next operation will fail, attempt to relogin, and, if successful, be retried.
+
 The key/value pairs entered in the real backend example are persistent until you stop paying Amazon, or remove them. For the simulated database, they last for only one session. They do, however, survive "Logout" followed by "Login".
 
 Bill St. Clair &lt;billstclair@gmail.com&gt;<br/>
