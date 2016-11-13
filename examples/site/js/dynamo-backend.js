@@ -241,6 +241,7 @@ function propertiesToObject(properties) {
 
 function errorProperties(operation, err) {
   return [ ["operation", operation],
+           ["type", "AWS error"],
            ["code", err.code || ""],
            ["error", err.message || ""],
            ["retryable", err.retryable ? "true" : "false"]
@@ -269,10 +270,20 @@ function dispatch(properties, port) {
       break;
     case "logout":
       // Properties expected: none
+      // Optional property: partial
       // Properties sent: Nothing sent
-      amazon.Login.logout();
-      localStorage.removeItem(appkey("accessToken"));
-      AWS.config.credentials.params.WebIdentityToken = "";
+      if (props.partial) {
+        localStorage.setItem(appkey("accessToken"), "foo");
+        var credentials = AWS.config.credentials;
+        credentials.accessKeyId = undefined;
+        credentials.secretAccessKey = undefined;
+        credentials.sessionToken = undefined;
+        credentials.params.WebIdentityToken = "foo";
+      } else {
+        amazon.Login.logout();
+        localStorage.removeItem(appkey("accessToken"));
+        AWS.config.credentials.params.WebIdentityToken = "";
+      }
       break;
     case "put":
       // Properties expected: user, key, value

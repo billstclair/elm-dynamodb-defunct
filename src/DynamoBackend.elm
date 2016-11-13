@@ -16,7 +16,7 @@ module DynamoBackend exposing ( Profile, Properties, StringDict
                               , DynamoServerInfo , makeDynamoDb, isRealDatabase
                               , makeSimulatedDb, makeMsgCmd
                               , installLoginScript, login
-                              , put, remove, get, scan, logout
+                              , put, remove, get, scan, logout, partialLogout
                               , update
                               )
 
@@ -56,7 +56,8 @@ part.
 # Functions
 @docs formatError, getProp, setProp, removeProp, mergeProps
 @docs makeDynamoDb, makeSimulatedDb, isRealDatabase, makeMsgCmd
-@docs installLoginScript, login, put, remove, get, scan, logout, update
+@docs installLoginScript, login, put, remove, get, scan, logout
+@docs partialLogout, update
 
 -}
 
@@ -769,6 +770,20 @@ logout database model =
       simulatedLogout simDb model
     Dynamo dynamoDb ->
       dynamoLogout dynamoDb model
+
+{-| For testing. Invalidates the saved access tokens
+-}
+partialLogout : Database model msg -> model -> Cmd msg
+partialLogout database model =
+  case database of
+    Simulated simDb ->
+      simulatedLogout simDb model
+    Dynamo dynamoDb ->
+      let props = [ ("operation", "logout")
+                  , ("partial", "true")
+                  ]
+      in
+        dynamoDb.backendPort props
 
 errorFromProperties : String -> Properties -> Error
 errorFromProperties message properties =

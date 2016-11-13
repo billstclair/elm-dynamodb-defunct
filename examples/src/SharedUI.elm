@@ -180,6 +180,7 @@ type Msg
   | Keydown Int
   | Login
   | Logout
+  | PartialLogout
   | Get
   | Put
   | Refresh
@@ -215,6 +216,12 @@ update msg model =
       case model.profile of
         Nothing -> (model, Cmd.none)
         Just _ -> (model, DB.logout (mdb model) model)
+    PartialLogout ->
+      case model.profile of
+        Nothing -> (model, Cmd.none)
+        Just _ -> ( { model |
+                      error = "Your next command will need to login, though it may be silent." }
+                  , DB.partialLogout (mdb model) model)
     Get ->
       case model.profile of
         Nothing -> (model, Cmd.none)
@@ -249,7 +256,10 @@ update msg model =
         Err error ->
           case error.errorType of
             DB.AccessExpired ->
-              ( { model | error = "" }
+              ( { model |
+                  error = ""
+                , profile = Nothing
+                }
               , makeMsgCmd Login
               )
             _ ->
@@ -340,6 +350,11 @@ sharedView subheader model =
                p []
                  [ text <| profile.name ++ " <" ++ profile.email ++ "> "
                  , button [ onClick Logout ] [ text "Logout" ]
+                 , text " "
+                 , if DB.isRealDatabase (mdb model) then
+                     button [ onClick PartialLogout ] [ text "Access Expired" ]
+                   else
+                     text ""
                  ]
               , div []
                 [ text "Key: "
