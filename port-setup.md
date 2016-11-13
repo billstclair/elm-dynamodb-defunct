@@ -20,6 +20,72 @@ elm reactor
 
 Now you can write your code, and debug it with the simulator. Key/value pairs you save will exist for only one session. As soon as you refresh your browser, or leave the page, they will be gone.
 
+You'll actually need to implement a lot of what I document below for your simulator-based application, but you won't need the JavaScript code or the ports.
+
+Specific to the simulated backend are an Elm `Dict` in which to store the key/value pairs and the creation of the simulated `Database`. From [examples/src/simulated.elm](examples/src/simulated.elm):
+
+```
+import Html.App as App
+
+main =
+  App.program
+    { init = init
+    , view = view
+    , update = update
+    , subscriptions = subscriptions
+    }
+
+profile : DB.Profile
+profile =
+  DB.Profile "someone@somewhere.net" "John Doe" "random-sequence-1234"
+
+database : Database
+database =
+  DB.makeSimulatedDb
+      profile getDbDict setDbDict backendCmd dispatcher
+
+init : (Model, Cmd Msg)
+init =
+  sharedInit database
+```
+
+`dispatcher` is documented below. `getDbDict` and `setDbDict` are simple accesors for that property of your Model. From `examples/src/SharedUI.elm`:
+
+```
+type alias Model =
+  { dbDict : DB.StringDict      -- used by the backend simulator
+  ...
+  }
+  
+getDbDict = .dbDict
+
+setDbDict : Dict String String -> Model -> Model
+setDbDict dict model =
+  { model | dbDict = dict }
+```
+
+`backendCmd` is simply wraps a `Cmd` around a `BackendMsg`:
+
+```
+makeMsgCmd = DB.makeMsgCmd
+
+backendCmd : DB.Properties -> Cmd Msg
+backendCmd properties =
+  makeMsgCmd <| BackendMsg properties
+
+type Msg
+  ...
+  | BackendMsg DB.Properties
+```
+
+The way that wrapper works is simple, but pretty interesting. It's a simple use of the Elm `Task` (from [src/DynamoBackend.elm](src/DynamoBackend.elm)):
+
+```
+makeMsgCmd : msg -> Cmd msg
+makeMsgCmd msg =
+  Task.perform identity identity (Task.succeed msg)
+```
+
 ## Using the real DynamoDB backend
 
 Connecting your application to the persistent Amazon backend is a bit more complicated.
@@ -81,7 +147,7 @@ port dynamoRequest : DB.Properties -> Cmd msg
 port dynamoResponse : (DB.Properties -> msg) -> Sub msg
 ```
 
-As I said earlier, your application needs to start with Html.App.programWithFlags:
+As I said earlier, your application needs to start with `Html.App.programWithFlags`:
 
 ```
 import Html.App as App
@@ -247,4 +313,4 @@ logoutReceiver database model =
 
 Happy hacking!
 
-Well, now that I've finished the DynamoDB backend, I can add it to MY application, [Kakuro Dojo](https://kakuro-dojo.com/), and more to come.
+Now that I've finished the DynamoDB backend, I can add it to MY application, [Kakuro Dojo](https://kakuro-dojo.com/), and more to come.
