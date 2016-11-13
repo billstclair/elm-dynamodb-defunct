@@ -64,7 +64,7 @@ setDbDict dict model =
   { model | dbDict = dict }
 ```
 
-`backendCmd` is simply wraps a `Cmd` around a `BackendMsg`:
+`backendCmd` simply wraps a `Cmd` around a `BackendMsg`:
 
 ```
 makeMsgCmd = DB.makeMsgCmd
@@ -78,7 +78,7 @@ type Msg
   | BackendMsg DB.Properties
 ```
 
-The way that wrapper works is simple, but pretty interesting. It's a simple use of the Elm `Task` (from [src/DynamoBackend.elm](src/DynamoBackend.elm)):
+The way that wrapper works is simple, but pretty interesting. It's a slightly unusual use of the Elm `Task` (from [src/DynamoBackend.elm](src/DynamoBackend.elm)):
 
 ```
 makeMsgCmd : msg -> Cmd msg
