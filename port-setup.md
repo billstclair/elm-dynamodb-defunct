@@ -92,6 +92,8 @@ Connecting your application to the persistent Amazon backend is a bit more compl
 
 Before doing the rest, you need to follow the instructions in [Configuring Amazon DynamoDB for DynamoBackend](amazon-setup.md). You'll come back with a `clientId`, `tableName`, `appName`, `roleArn`, and `awsRegion` from that process. You'll need them below.
 
+## Ports
+
 In order to have ports in your Elm app, to talk to JavaScript code, you need to start your app with `Html.App.programWithFlags`, not `Html.App.program` or `Html.App.beginnerProgram`. The big difference is that your `init` function takes an additional `flags` argument, which is passed in from the JavaScript in your `index.html` file (whatever it is named).
 
 The file [`examples/site/dynamo-example.html`](examples/site/dynamo-example.html) is the top-level HTML file for my examples application, implemented by [`examples/src/real.elm`](examples/src/real.elm) and [`examples/src/SharedUI.elm`](examples/src/SharedUI.elm). Your top-level application will need to include at least what it does, with more if you have your own ports.
@@ -146,6 +148,8 @@ port module Main exposing (..)
 port dynamoRequest : DB.Properties -> Cmd msg
 port dynamoResponse : (DB.Properties -> msg) -> Sub msg
 ```
+
+## The Elm Code
 
 As I said earlier, your application needs to start with `Html.App.programWithFlags`:
 
@@ -310,6 +314,8 @@ logoutReceiver database model =
   , Cmd.none
   )
 ```
+
+## Whew!
 
 Happy hacking!
 
