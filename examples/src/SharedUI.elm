@@ -134,6 +134,7 @@ logoutReceiver database model =
     , value = ""
     , keys = []
     , valueDict = Dict.empty
+    , loggedInOnce = False
     }
   , Cmd.none
   )
@@ -337,7 +338,7 @@ sharedView subheader model =
           div []
               [
                p []
-                 [ text <| profile.name ++ "<" ++ profile.email ++ "> "
+                 [ text <| profile.name ++ " <" ++ profile.email ++ "> "
                  , button [ onClick Logout ] [ text "Logout" ]
                  ]
               , div []
@@ -399,9 +400,12 @@ rowLoop keys dict res =
                     Just v -> v
           row = tr []
                 [ td [ borderStyle
-                     , onClick <| SetKey key ]
+                     , onClick <| SetKey key
+                     ]
                     [ text key ]
-                , td [ borderStyle ]
+                , td [ borderStyle
+                     , onClick <| SetKey key
+                     ]
                     [ text value ]
                 ]
       in
