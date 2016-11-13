@@ -22,7 +22,7 @@ Now you can write your code, and debug it with the simulator. Key/value pairs yo
 
 You'll actually need to implement a lot of what I document below for your simulator-based application, but you won't need the JavaScript code or the ports.
 
-Specific to the simulated backend are an Elm `Dict` in which to store the key/value pairs and the creation of the simulated `Database`. From [examples/src/simulated.elm](examples/src/simulated.elm):
+Specific to the simulated backend are an Elm `Dict`, in which to store the key/value pairs, and the creation of the simulated `Database`. From [examples/src/simulated.elm](examples/src/simulated.elm):
 
 ```
 import Html.App as App
