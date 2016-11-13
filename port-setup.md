@@ -24,9 +24,9 @@ Now you can write your code, and debug it with the simulator. Key/value pairs yo
 
 Connecting your application to the persistent Amazon backend is a bit more complicated.
 
-Before doing the rest, you need to follow the instructions in [Configuring Amazon DynamoDB for DynamoBackend](amazon-setup.md). You'll come back with a clientId, tableName, appName, roleArn, and awsRegion from that process.
+Before doing the rest, you need to follow the instructions in [Configuring Amazon DynamoDB for DynamoBackend](amazon-setup.md). You'll come back with a `clientId`, `tableName`, `appName`, `roleArn`, and `awsRegion` from that process. You'll need them below.
 
-In order to have ports in your Elm app, to talk to JavaScript code, you need to start your app with `Html.App.programWithFlags`, not `Html.App.program` or `Html.App.beginningProgram`. The big difference is that your `init` function takes an additional `flags` argument, which is passed in from the JavaScript in your `index.html` file (whatever it is named).
+In order to have ports in your Elm app, to talk to JavaScript code, you need to start your app with `Html.App.programWithFlags`, not `Html.App.program` or `Html.App.beginnerProgram`. The big difference is that your `init` function takes an additional `flags` argument, which is passed in from the JavaScript in your `index.html` file (whatever it is named).
 
 The file [`examples/site/dynamo-example.html`](examples/site/dynamo-example.html) is the top-level HTML file for my examples application, implemented by [`examples/src/real.elm`](examples/src/real.elm) and [`examples/src/SharedUI.elm`](examples/src/SharedUI.elm). Your top-level application will need to include at least what it does, with more if you have your own ports.
 
@@ -48,4 +48,203 @@ The easiest way to start is to copy the [examples/site](examples/site/) director
 </head>
 ```
 
-You'll remove the `<link>` line for `css/tables.css`, and you can remove the commented out `<script>` line for `'https://sdk.amazonaws.com/js/aws-sdk-2.6.12.min.js`, which I kept there as a reminder of where the full AWS JavaScript library lives (`js/aws-sdk-2.6.15.min.js` is a subset library, containing only the DynamoDB API, created at [sdk.amazonaws.com/builder/js](https://sdk.amazonaws.com/builder/js/)).
+You'll probably remove the `<link>` line for `css/tables.css` (unless your app has tables, and you like that look), and you can remove the commented out `<script>` line for `'https://sdk.amazonaws.com/js/aws-sdk-2.6.12.min.js`, which I kept there as a reminder of where the full AWS JavaScript library lives (`js/aws-sdk-2.6.15.min.js` is a subset library, containing only the DynamoDB API, created at [sdk.amazonaws.com/builder/js](https://sdk.amazonaws.com/builder/js/)).
+
+`js/dynamo-server-info.js` doesn't exist yet. You need to rename `js/dynamo-server-info.js.template` to `js/dynamo-server-info.js` and replace the values for `clientId`, `tableName`, `appName`, `roleArn`, and `awsRegion` with the values for your application and table.
+
+`js/Main.js` is the name I gave the "binary" of my Elm code. If you use something else, you'll need to change that to match.
+
+There are a lot of comments, which you can remove, but not a lot more to `dynamo-example.html`:
+
+```
+var app = Elm.Main.fullscreen(dynamoServerInfo);
+
+var responsePort = app.ports.dynamoResponse;
+
+// Elm Ports
+app.ports.dynamoRequest.subscribe(function(properties) {
+  dynamoBackend.dispatch(properties, responsePort);
+});
+
+```
+
+There are three names in that code that are important. `Main` is the name of your top-level port module. `dynamoResponse` is the name of your input port, to which your code needs to `subscribe`. `dynamoRequest` is the name of your output port.
+
+These names appear in [examples/src/real.elm](examples/src/real.elm). If you need them to be different for your application, you'll need to change them in the top-level HTML file as well. But they have to appear just as they do in `real.elm`:
+
+```
+port module Main exposing (..)
+
+...
+
+port dynamoRequest : DB.Properties -> Cmd msg
+port dynamoResponse : (DB.Properties -> msg) -> Sub msg
+```
+
+As I said earlier, your application needs to start with Html.App.programWithFlags:
+
+```
+import Html.App as App
+
+main =
+  App.programWithFlags
+    { init = init
+    , view = view
+    , update = update
+    , subscriptions = subscriptions
+    }
+```
+
+And the backend will give you a DynamoServerInfo record at startup. You may need to modify this, if you have other ports and need to return other information.
+
+```
+import DynamoBackend as DB
+
+...
+
+init : DB.DynamoServerInfo -> (Model, Cmd Msg)
+init serverInfo =
+  let database = DB.makeDynamoDb
+                   serverInfo getProperties setProperties
+                   dynamoRequest BackendMsg dispatcher
+  in
+    let (model, cmd) = sharedInit database
+    in
+      ( model
+      , Cmd.batch [ cmd, DB.installLoginScript database model ]
+      )
+
+...
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+  dynamoResponse BackendMsg
+
+```
+
+That call of `DB.makeDynamoDb` requires a bunch of definitions. `serverInfo` is a parameter to `init`. `dynamoRequest` is defined as a `port`.
+
+`getProperties`, `setProperties`, `BackendMsg`, `dispatcher`, and `sharedInit` are defined in [examples/src/SharedUI.elm](examples/src/SharedUI.elm). Your versions of them will be application-specific, but you need to include the database in your Model. I've removed the application-specific parts of the `SharedUI.elm` Model definition below:
+
+```
+type alias Model =
+  { database : DbType
+  , properties : DB.Properties  -- For DynamoBackend private state
+  , profile : Maybe DB.Profile  -- Nothing until logged in
+  , error : String
+  , loggedInOnce : Bool
+  }
+
+mdb : Model -> Database
+mdb model =
+  case model.database of
+    Db res -> res
+    
+type alias Database =
+  DB.Database Model Msg
+
+type DbType
+  = Db Database
+
+```
+
+Note that I had to wrap the `DB.Database` with a `type`, to avoid recursive definitions of Model including Database including Model including...
+
+
+`getProperties` and `setProperties` are simple getter and setter for the `properties` property of your Model record:
+
+```
+getProperties = .properties
+
+setProperties : DB.Properties -> Model -> Model
+setProperties properties model =
+  { model | properties = properties }
+```
+
+`BackendMsg` is created in response to input port sends from the JavaScript code. It is also used by the `DynamoBackend` module to send messages to itself.
+
+```
+type Msg
+  = ...
+  | Login
+  | Logout
+  ...
+  | BackendMsg DB.Properties
+  ...
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg model =
+  case msg of
+    ...
+    Login ->
+      case model.profile of
+        Nothing -> (model, DB.login (mdb model) model)
+        Just _ -> (model, Cmd.none)
+    Logout ->
+      case model.profile of
+        Nothing -> (model, Cmd.none)
+        Just _ -> (model, DB.logout (mdb model) model)
+    ...
+    BackendMsg properties ->
+      case DB.update properties (mdb model) model of
+        Err error ->
+          case error.errorType of
+            DB.AccessExpired ->
+              ( { model | error = "" }
+              , makeMsgCmd Login
+              )
+            _ ->
+              ( { model | error = DB.formatError error }
+              , Cmd.none
+              )
+        Ok (model', cmd) ->
+          ( { model' | error = "" }
+          , cmd
+          )
+```
+
+Your error handling code will be application-specific, but the call of `DB.update` is key. Invocation of the login code is also important, if you get a `DB.AccessExpired` error. My example just turns other errors into a string that is displayed by the `update` code.
+
+All that's left from the call to `DB.makeDynamoDb` above is the `dispatcher`:
+
+```
+dispatcher : DB.ResultDispatcher Model Msg
+dispatcher =
+  DB.ResultDispatcher
+    loginReceiver getReceiver putReceiver scanReceiver logoutReceiver
+```
+
+Your code for the individual dispatcher functions will be application-specific, but your `loginReceiver` and `logoutReceiver` will likely be similar to mine:
+
+```
+loginReceiver : DB.Profile -> Database -> Model -> (Model, Cmd Msg)
+loginReceiver profile database model =
+  ( { model |
+      profile = Just profile
+    , loggedInOnce = True
+    }
+  , if model.loggedInOnce then
+      -- This should retry the command that got the AccessExpired error.
+      -- Go ahead. Call me lazy.
+      Cmd.none
+    else
+      DB.scan False profile.userId database model
+  )
+
+logoutReceiver : Database -> Model -> (Model, Cmd Msg)
+logoutReceiver database model =
+  ( { model |
+      profile = Nothing
+    , key = ""
+    , value = ""
+    , keys = []
+    , valueDict = Dict.empty
+    , loggedInOnce = False
+    }
+  , Cmd.none
+  )
+```
+
+Happy hacking!
+
+Well, now that I've finished the DynamoDB backend, I can add it to MY application, [Kakuro Dojo](https://kakuro-dojo.com/), and more to come.
