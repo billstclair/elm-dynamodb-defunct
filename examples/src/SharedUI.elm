@@ -38,28 +38,14 @@ import Json.Decode as Json
 -- MODEL
 
 type alias Model =
-    { dbDict :
-        DB.StringDict
-        -- used by the backend simulator
+    { dbDict : DB.StringDict     -- used by the backend simulator
     , database : DbType
-    , properties :
-        DB.Properties
-        -- For DynamoBackend private state
-    , profile :
-        Maybe DB.Profile
-        -- Nothing until logged in
-    , keys :
-        List String
-        -- keys returned by DB.scan
-    , valueDict :
-        DB.StringDict
-        -- used by this code to cache key/value pairs
-    , key :
-        String
-        -- displayed key input
-    , value :
-        String
-        -- displayed value input
+    , properties : DB.Properties -- For DynamoBackend private state
+    , profile : Maybe DB.Profile -- Nothing until logged in
+    , keys : List String         -- keys returned by DB.scan
+    , valueDict : DB.StringDict  -- used by this code to cache key/value pairs
+    , key : String               -- displayed key input
+    , value : String             -- displayed value input
     , error : String
     , loggedInOnce : Bool
     , retryProperties : Maybe DB.Properties
@@ -68,8 +54,7 @@ type alias Model =
 mdb : Model -> Database
 mdb model =
     case model.database of
-        Db res ->
-            res
+        Db res -> res
 
 getProperties =
     .properties
@@ -95,9 +80,7 @@ loginReceiver profile database model =
       }
     , if model.loggedInOnce then
         case model.retryProperties of
-            Nothing ->
-                Cmd.none
-
+            Nothing -> Cmd.none
             Just retryProperties ->
                 DB.retry database retryProperties
       else
@@ -114,8 +97,7 @@ insertInKeys key keys =
 getReceiver : String -> Maybe String -> Database -> Model -> ( Model, Cmd Msg )
 getReceiver key maybeValue database model =
     ( case maybeValue of
-        Nothing ->
-          { model | value = "" }
+        Nothing -> { model | value = "" }
         Just value ->
             { model
                 | value = value
@@ -468,16 +450,12 @@ sharedView subheader model =
 rowLoop : List String -> DB.StringDict -> List (Html Msg) -> List (Html Msg)
 rowLoop keys dict res =
     case keys of
-        [] ->
-            List.reverse res
+        [] -> List.reverse res
         key :: tail ->
-            let
-                value =
-                    case Dict.get key dict of
-                        Nothing -> nbsp
-                        Just v -> v
-                row =
-                    tr []
+            let value = case Dict.get key dict of
+                          Nothing -> nbsp
+                          Just v -> v
+                row = tr []
                         [ td
                             [ borderStyle
                             , onClick <| SetKey key
@@ -490,4 +468,5 @@ rowLoop keys dict res =
                             [ text value ]
                         ]
             in
-                rowLoop tail dict (row :: res)
+              rowLoop tail dict (row :: res)
+                  
