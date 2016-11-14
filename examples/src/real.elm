@@ -12,40 +12,37 @@
 port module Main exposing (..)
 
 import SharedUI exposing ( Model, Msg(BackendMsg)
-                         , makeMsgCmd
-                         , getProperties, setProperties
-                         , sharedInit, sharedView, update
-                         , dispatcher
+                         , makeMsgCmd, getProperties, setProperties
+                         , sharedInit, sharedView, update, dispatcher
                          )
 import DynamoBackend as DB
-
 import Html exposing (Html)
-import Html.App as App
 
 main =
-  App.programWithFlags
-    { init = init
-    , view = view
-    , update = update
-    , subscriptions = subscriptions
-    }
+    Html.programWithFlags
+        { init = init
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
+        }
 
 port dynamoRequest : DB.Properties -> Cmd msg
+
 port dynamoResponse : (DB.Properties -> msg) -> Sub msg
 
 -- MODEL
 
-init : DB.DynamoServerInfo -> (Model, Cmd Msg)
+init : DB.DynamoServerInfo -> ( Model, Cmd Msg )
 init serverInfo =
-  let database = DB.makeDynamoDb
-                   serverInfo getProperties setProperties
-                   dynamoRequest BackendMsg dispatcher
-  in
-    let (model, cmd) = sharedInit database
+    let database = DB.makeDynamoDb
+                     serverInfo getProperties setProperties
+                     dynamoRequest BackendMsg dispatcher
     in
-      ( model
-      , Cmd.batch [ cmd, DB.installLoginScript database model ]
-      )
+        let ( model, cmd ) = sharedInit database
+        in
+            ( model
+            , Cmd.batch [ cmd, DB.installLoginScript database model ]
+            )
 
 -- UPDATE
 -- All in SharedUI.elm
@@ -54,10 +51,10 @@ init serverInfo =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-  dynamoResponse BackendMsg
+    dynamoResponse BackendMsg
 
 -- VIEW
 
 view : Model -> Html Msg
 view model =
-  sharedView "Real DynamoDb Backend" model
+    sharedView "Real DynamoDb Backend" model
