@@ -1,8 +1,8 @@
 {
-    "version": "1.0.1",
+    "version": "1.0.2",
     "summary": "Elm interface to Amazon's DynamoDB key/value store.",
     "repository": "https://github.com/billstclair/elm-dynamodb.git",
-    "license": "BSD3",
+    "license": "MIT",
     "source-directories": [
         "src"
     ],
